@@ -5,4 +5,35 @@
 
 <h1>Dashboard</h1>
 
-<p>This will be the location of the dashboard.</p>
+@if (ViewBag.Success != null)
+{
+    <div class="alert alert-success">
+        @ViewBag.Success
+    </div>
+}
+
+@using (Html.BeginForm("Index", "Dashboard", FormMethod.Post))
+{
+    @Html.AntiForgeryToken()
+
+    <div class="form-group">
+        <label for="domain">Base Domain</label>
+        <input type="text"
+               name="domain"
+               class="form-control"
+               placeholder="example.com"
+               value="@ViewBag.Domain" />
+
+        @Html.ValidationMessage("domain", "", new { @class = "text-danger" })
+    </div>
+
+    <br />
+
+    <button type="submit" class="btn btn-primary">
+        Start Scan
+    </button>
+}
+
+<script src="https://ajax.aspnetcdn.com/ajax/jquery/jquery-3.6.0.min.js"></script>
+<script src="https://ajax.aspnetcdn.com/ajax/jquery.validate/1.19.5/jquery.validate.min.js"></script>
+<script src="https://ajax.aspnetcdn.com/ajax/mvc/5.2.3/jquery.validate.unobtrusive.min.js"></script>
