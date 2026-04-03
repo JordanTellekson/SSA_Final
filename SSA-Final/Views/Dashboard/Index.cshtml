@@ -1,6 +1,10 @@
-﻿@{
+﻿@using SSA_Final.ViewModels;
+@model DomainScanViewModel
+
+@{
     ViewData["Title"] = "Dashboard";
     Layout = "~/Views/Shared/_Layout.cshtml";
+    var scans = ViewBag.Scans as List<DomainScan>;
 }
 
 <h1>Dashboard</h1>
@@ -17,14 +21,15 @@
     @Html.AntiForgeryToken()
 
     <div class="form-group">
-        <label for="domain">Base Domain</label>
-        <input type="text"
-               name="domain"
-               class="form-control"
-               placeholder="example.com"
-               value="@ViewBag.Domain" />
+        <label>Base Domain</label>
 
-        @Html.ValidationMessage("domain", "", new { @class = "text-danger" })
+        @Html.TextBoxFor(m => m.Domain, new
+        {
+            @class = "form-control",
+            placeholder = "example.com"
+        })
+
+        @Html.ValidationMessageFor(m => m.Domain, "", new { @class = "text-danger" })
     </div>
 
     <br />
@@ -32,6 +37,26 @@
     <button type="submit" class="btn btn-primary">
         Start Scan
     </button>
+}
+
+<hr />
+
+<h3>Previous Scans</h3>
+
+@if (scans != null && scans.Any())
+{
+    <ul>
+        @foreach (var scan in scans)
+        {
+            <li>
+                <strong>@scan.Domain</strong> - @scan.CreatedAt
+            </li>
+        }
+    </ul>
+}
+else
+{
+    <p>No scans yet.</p>
 }
 
 <script src="https://ajax.aspnetcdn.com/ajax/jquery/jquery-3.6.0.min.js"></script>

@@ -1,10 +1,16 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SSA_Final.Models;
+using SSA_Final.ViewModels;
 
 namespace SSA_Final.Controllers
 {
+    [Authorize]
     public class DashboardController : Controller
     {
+        // In-memory storage (fow now)
+        private static List<DomainScan> _scans = new List<DomainScan>();
+
         private readonly ILogger<DashboardController> _logger;
 
         public DashboardController(ILogger<DashboardController> logger)
@@ -16,8 +22,10 @@ namespace SSA_Final.Controllers
         public ActionResult Index()
         {
             _logger.LogInformation("Dashboard Index accessed at {Time}", DateTime.UtcNow);
+            var model = new DomainScanViewModel();
+            ViewBag.Scans = _scans;
 
-            return View();
+            return View(model);
         }
 
         [HttpPost]
@@ -26,6 +34,7 @@ namespace SSA_Final.Controllers
         {
             // Preserve input
             ViewBag.Domain = domain;
+            ViewBag.Scans = _scans;
 
             if (string.IsNullOrWhiteSpace(domain))
             {
@@ -45,15 +54,18 @@ namespace SSA_Final.Controllers
                 return View();
             }
 
-            // Create in-memory DomainScan object
-            //var domainScan = new DomainScan
-            //{
-            //    Domain = domain,
-            //    CreatedAt = DateTime.UtcNow
-            //};
+            var normalizedDomain = domain.Trim().ToLower();
 
-            ViewBag.Success = $"Scan created for {domain}";
-            ViewBag.Domain = ""; // clear input after success
+            var domainScan = new DomainScan
+            {
+                Domain = normalizedDomain,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _scans.Add(domainScan);
+
+            ViewBag.Success = $"Scan created for {normalizedDomain}";
+            ViewBag.Domain = "";
 
             return View();
         }
