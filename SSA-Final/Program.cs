@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SSA_Final.Data;
+using SSA_Final.Interfaces;
+using SSA_Final.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +29,12 @@ builder.Services.AddDbContext<SSA_FinalContext>(options =>
     options.UseSqlServer(connectionString);
     logger.LogInformation("Database context configured with connection string.");
 });
+
+builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
+builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
+
+logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
+logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService  (Scoped).");
 
 // Configure Identity
 builder.Services.AddDefaultIdentity<IdentityUser>(options =>
