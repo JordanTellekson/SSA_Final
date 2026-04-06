@@ -5,6 +5,7 @@ using System.Linq;
 
 namespace SSA_Final.Models
 {
+    // Model-only service for domain allow-list matching and phishing-risk signal scoring.
     public class DomainMatcherModel
     {
         public string DomainsFilePath { get; }
@@ -43,6 +44,7 @@ namespace SSA_Final.Models
                 return DomainRiskAnalysisResult.InvalidInput();
             }
 
+            // If this is in the trusted active-domain list, skip phishing scoring.
             if (_activeDomains.Value.Contains(normalizedInput))
             {
                 return DomainRiskAnalysisResult.ForKnownActiveDomain(normalizedInput);
@@ -100,6 +102,7 @@ namespace SSA_Final.Models
 
             foreach (var candidateRoot in _activeRootDomains.Value)
             {
+                // Quick length gate: if lengths differ too much, edit distance <= 3 is impossible.
                 if (Math.Abs(candidateRoot.Length - inputRoot.Length) > 3)
                 {
                     continue;
@@ -120,6 +123,7 @@ namespace SSA_Final.Models
 
             var score = minDistance switch
             {
+                // Higher score when one or two edits away from a known root (common typosquatting pattern).
                 1 => 25,
                 2 => 18,
                 3 => 10,
@@ -137,6 +141,7 @@ namespace SSA_Final.Models
         private static DomainRiskSignalScore CalculateSubdomainScore(string normalizedInput)
         {
             var labels = normalizedInput.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            // Approximation: treat the last two labels as base domain + TLD.
             var subdomainCount = Math.Max(labels.Length - 2, 0);
 
             var score = subdomainCount switch
@@ -180,6 +185,7 @@ namespace SSA_Final.Models
 
         private static DomainRiskSignalScore CalculateEntropyScore(string normalizedInput)
         {
+            // Entropy is based on alphanumeric characters only to reduce punctuation noise.
             var sample = new string(normalizedInput.Where(char.IsLetterOrDigit).ToArray());
             var entropy = CalculateShannonEntropy(sample);
 
@@ -193,6 +199,7 @@ namespace SSA_Final.Models
 
             var labels = normalizedInput.Split('.', StringSplitOptions.RemoveEmptyEntries);
             var longestLabel = labels.Length == 0 ? 0 : labels.Max(label => label.Length);
+            // Long, high-entropy labels are more likely to be algorithmically generated.
             if (longestLabel >= 15 && entropy >= 3.5)
             {
                 score = Math.Min(25, score + 4);
@@ -225,6 +232,7 @@ namespace SSA_Final.Models
         {
             if (Math.Abs(a.Length - b.Length) > maxDistance)
             {
+                // Early exit keeps comparisons fast on large allow-lists.
                 return maxDistance + 1;
             }
 
@@ -252,6 +260,7 @@ namespace SSA_Final.Models
 
                 if (rowMin > maxDistance)
                 {
+                    // Stop once this row can no longer recover below the configured threshold.
                     return maxDistance + 1;
                 }
 
@@ -297,6 +306,7 @@ namespace SSA_Final.Models
 
             if (!value.Contains("://", StringComparison.Ordinal))
             {
+                // Allow plain host input (for example: "example.com") by adding a temporary scheme.
                 value = "http://" + value;
             }
 

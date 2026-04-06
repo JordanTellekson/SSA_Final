@@ -1,5 +1,6 @@
 namespace SSA_Final.Models
 {
+    // Immutable payload returned by the model's phishing-risk analysis.
     public class DomainRiskAnalysisResult
     {
         public DomainRiskAnalysisResult(
@@ -40,6 +41,7 @@ namespace SSA_Final.Models
 
         public static DomainRiskAnalysisResult InvalidInput()
         {
+            // Keeps consumer code simple by returning a fully-shaped object for invalid input.
             var emptySignal = new DomainRiskSignalScore("N/A", 0, false, "Invalid input.");
             return new DomainRiskAnalysisResult(
                 inputDomain: string.Empty,
@@ -54,6 +56,7 @@ namespace SSA_Final.Models
 
         public static DomainRiskAnalysisResult ForKnownActiveDomain(string domain)
         {
+            // Active-domain matches short-circuit risk scoring by design.
             var noRisk = new DomainRiskSignalScore("N/A", 0, false, "Domain is already in Active_Domains.txt.");
             return new DomainRiskAnalysisResult(
                 inputDomain: domain,
@@ -67,6 +70,7 @@ namespace SSA_Final.Models
         }
     }
 
+    // Individual risk-signal score (one of the four checks) with context details.
     public class DomainRiskSignalScore
     {
         public DomainRiskSignalScore(string signal, int score, bool triggered, string detail)
