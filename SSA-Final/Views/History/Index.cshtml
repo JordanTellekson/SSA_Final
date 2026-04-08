@@ -2,7 +2,89 @@
     ViewData["Title"] = "History";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
+<style>
+    .orb {
+        --orb-color: #f00;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        box-shadow: 0 0 10px var(--orb-color);
+        background-color: var(--orb-color);
+        z-index: 99;
+    }
 
-<h1>Dashboard</h1>
+    .orb-success {
+        --orb-color: #00a800;
+    }
 
-<p>This will be where you can view histroy.</p>
+    .orb-warning {
+        --orb-color: #d10808;
+    }
+
+    .orb-pending {
+        --orb-color: #d1d108;
+        animation: pulse 2s infinite;
+    }
+
+    @@keyframes pulse {
+        0% {
+            filter: brightness(100%);
+        }
+        50% {
+            filter: brightness(50%);
+        }
+        100% {
+            filter: brightness(100%);
+        }
+    }
+</style>
+
+<h1>Scan history</h1>
+
+<ul class="list-group">
+    @foreach (DomainScan scan in Model ?? Enumerable.Empty<DomainScan>())
+    {
+        <li class="list-group-item d-flex dropdown ">
+
+            <a href="#" role="button" data-bs-toggle="dropdown" aria-expanded="true" class="stretched-link show"></a>
+            <div class="d-flex justify-content-center align-items-center me-5">
+                @{
+                    string orbClass = "orb-pending";
+                    string tooltipText = "";
+                    switch (scan.Status)
+                    {
+                        case DomainScanStatus.Complete:
+                            orbClass = "orb-success";
+                            tooltipText = "Scan complete";
+                            break;
+                        case DomainScanStatus.CompleteWithResults:
+                            orbClass = "orb-warning";
+                            tooltipText = "Scan complete, malicious domains found";
+                            break;
+                        default:
+                            orbClass = "orb-pending";
+                            tooltipText = "Scan in progress";
+                            break;
+                    }
+                }
+                <div class="orb @orbClass" data-bs-toggle="tooltip" data-bs-title="@tooltipText"></div>
+            </div>
+            <b>@scan.Domain</b>
+            <ul class="dropdown-menu" data-popper-placement="bottom-start">
+                <li><span class="dropdown-item">@scan.NumMaliciousDomains malicious domains found</span></li>
+                <li><span class="dropdown-item">Completed at @scan.TimeFinished</span></li>
+                <li><span class="dropdown-item">Scan ID: DE60632BF298388F1FC01F20</span></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#">Go to scan</a></li>
+            </ul>
+        </li>
+    }
+</ul>
+
+@section Scripts {
+    <script>
+        // register tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    </script>
+}
