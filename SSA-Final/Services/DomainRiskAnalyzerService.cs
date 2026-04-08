@@ -1,21 +1,22 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+using SSA_Final.Interfaces;
+using SSA_Final.Models;
 
-namespace SSA_Final.Models
+namespace SSA_Final.Services
 {
-    // Model-only service for domain allow-list matching and phishing-risk signal scoring.
-    public class DomainMatcherModel
+    public class DomainRiskAnalyzerService : IDomainRiskAnalyzer
     {
-        public string DomainsFilePath { get; }
-
+        private readonly ILogger<DomainRiskAnalyzerService> _logger;
+        private readonly string _domainsFilePath;
         private readonly Lazy<HashSet<string>> _activeDomains;
         private readonly Lazy<List<string>> _activeRootDomains;
 
-        public DomainMatcherModel(string? domainsFilePath = null)
+        public DomainRiskAnalyzerService(
+            ILogger<DomainRiskAnalyzerService> logger,
+            IWebHostEnvironment hostEnvironment)
         {
-            DomainsFilePath = domainsFilePath ?? Path.Combine(Directory.GetCurrentDirectory(), "Active_Domains.txt");
+            _logger = logger;
+            _domainsFilePath = Path.Combine(hostEnvironment.ContentRootPath, "Active_Domains.txt");
+
             _activeDomains = new Lazy<HashSet<string>>(LoadDomains);
             _activeRootDomains = new Lazy<List<string>>(() =>
                 _activeDomains.Value
@@ -25,9 +26,9 @@ namespace SSA_Final.Models
                     .ToList());
         }
 
-        public bool IsMatch(string? manualDomainInput)
+        public bool IsKnownActiveDomain(string? domainInput)
         {
-            var normalizedInput = NormalizeDomain(manualDomainInput);
+            var normalizedInput = NormalizeDomain(domainInput);
             if (string.IsNullOrWhiteSpace(normalizedInput))
             {
                 return false;
@@ -36,15 +37,14 @@ namespace SSA_Final.Models
             return _activeDomains.Value.Contains(normalizedInput);
         }
 
-        public DomainRiskAnalysisResult AnalyzeDomainRisk(string? manualDomainInput)
+        public DomainRiskAnalysisResult AnalyzeDomainRisk(string? domainInput)
         {
-            var normalizedInput = NormalizeDomain(manualDomainInput);
+            var normalizedInput = NormalizeDomain(domainInput);
             if (string.IsNullOrWhiteSpace(normalizedInput))
             {
                 return DomainRiskAnalysisResult.InvalidInput();
             }
 
-            // If this is in the trusted active-domain list, skip phishing scoring.
             if (_activeDomains.Value.Contains(normalizedInput))
             {
                 return DomainRiskAnalysisResult.ForKnownActiveDomain(normalizedInput);
@@ -70,14 +70,15 @@ namespace SSA_Final.Models
 
         private HashSet<string> LoadDomains()
         {
-            if (!File.Exists(DomainsFilePath))
+            if (!File.Exists(_domainsFilePath))
             {
-                throw new FileNotFoundException("Could not find Active_Domains.txt.", DomainsFilePath);
+                _logger.LogWarning("Domain allow-list not found at path: {Path}", _domainsFilePath);
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             }
 
             var domains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var line in File.ReadLines(DomainsFilePath))
+            foreach (var line in File.ReadLines(_domainsFilePath))
             {
                 var normalized = NormalizeDomain(line);
                 if (!string.IsNullOrWhiteSpace(normalized))
@@ -86,6 +87,7 @@ namespace SSA_Final.Models
                 }
             }
 
+            _logger.LogInformation("Loaded {Count} active domains for risk analysis.", domains.Count);
             return domains;
         }
 
@@ -102,7 +104,6 @@ namespace SSA_Final.Models
 
             foreach (var candidateRoot in _activeRootDomains.Value)
             {
-                // Quick length gate: if lengths differ too much, edit distance <= 3 is impossible.
                 if (Math.Abs(candidateRoot.Length - inputRoot.Length) > 3)
                 {
                     continue;
@@ -123,7 +124,6 @@ namespace SSA_Final.Models
 
             var score = minDistance switch
             {
-                // Higher score when one or two edits away from a known root (common typosquatting pattern).
                 1 => 25,
                 2 => 18,
                 3 => 10,
@@ -141,7 +141,6 @@ namespace SSA_Final.Models
         private static DomainRiskSignalScore CalculateSubdomainScore(string normalizedInput)
         {
             var labels = normalizedInput.Split('.', StringSplitOptions.RemoveEmptyEntries);
-            // Approximation: treat the last two labels as base domain + TLD.
             var subdomainCount = Math.Max(labels.Length - 2, 0);
 
             var score = subdomainCount switch
@@ -185,7 +184,6 @@ namespace SSA_Final.Models
 
         private static DomainRiskSignalScore CalculateEntropyScore(string normalizedInput)
         {
-            // Entropy is based on alphanumeric characters only to reduce punctuation noise.
             var sample = new string(normalizedInput.Where(char.IsLetterOrDigit).ToArray());
             var entropy = CalculateShannonEntropy(sample);
 
@@ -199,7 +197,6 @@ namespace SSA_Final.Models
 
             var labels = normalizedInput.Split('.', StringSplitOptions.RemoveEmptyEntries);
             var longestLabel = labels.Length == 0 ? 0 : labels.Max(label => label.Length);
-            // Long, high-entropy labels are more likely to be algorithmically generated.
             if (longestLabel >= 15 && entropy >= 3.5)
             {
                 score = Math.Min(25, score + 4);
@@ -232,7 +229,6 @@ namespace SSA_Final.Models
         {
             if (Math.Abs(a.Length - b.Length) > maxDistance)
             {
-                // Early exit keeps comparisons fast on large allow-lists.
                 return maxDistance + 1;
             }
 
@@ -260,7 +256,6 @@ namespace SSA_Final.Models
 
                 if (rowMin > maxDistance)
                 {
-                    // Stop once this row can no longer recover below the configured threshold.
                     return maxDistance + 1;
                 }
 
@@ -303,10 +298,8 @@ namespace SSA_Final.Models
             }
 
             var value = rawDomain.Trim();
-
             if (!value.Contains("://", StringComparison.Ordinal))
             {
-                // Allow plain host input (for example: "example.com") by adding a temporary scheme.
                 value = "http://" + value;
             }
 

@@ -32,9 +32,11 @@ builder.Services.AddDbContext<SSA_FinalContext>(options =>
 
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
+builder.Services.AddScoped<IDomainRiskAnalyzer, DomainRiskAnalyzerService>();
 
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService  (Scoped).");
+logger.LogInformation("Registered IDomainRiskAnalyzer -> DomainRiskAnalyzerService (Scoped).");
 
 // Configure Identity
 builder.Services.AddDefaultIdentity<IdentityUser>(options =>

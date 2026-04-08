@@ -1,6 +1,6 @@
 namespace SSA_Final.Models
 {
-    // Immutable payload returned by the model's phishing-risk analysis.
+    // Immutable payload returned by phishing-risk analysis.
     public class DomainRiskAnalysisResult
     {
         public DomainRiskAnalysisResult(
@@ -68,25 +68,5 @@ namespace SSA_Final.Models
                 hyphenAbuse: noRisk,
                 shannonEntropy: noRisk);
         }
-    }
-
-    // Individual risk-signal score (one of the four checks) with context details.
-    public class DomainRiskSignalScore
-    {
-        public DomainRiskSignalScore(string signal, int score, bool triggered, string detail)
-        {
-            Signal = signal;
-            Score = score;
-            Triggered = triggered;
-            Detail = detail;
-        }
-
-        public string Signal { get; }
-
-        public int Score { get; }
-
-        public bool Triggered { get; }
-
-        public string Detail { get; }
     }
 }
