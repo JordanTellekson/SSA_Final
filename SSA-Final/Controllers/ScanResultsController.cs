@@ -10,13 +10,16 @@ namespace SSA_Final.Controllers
     {
         private readonly ILogger<ScanResultsController> _logger;
         private readonly IDomainAnalyzer _domainAnalyzer;
+        private readonly IDomainRiskAnalyzer _domainRiskAnalyzer;
 
         public ScanResultsController(
             ILogger<ScanResultsController> logger,
-            IDomainAnalyzer domainAnalyzer)
+            IDomainAnalyzer domainAnalyzer,
+            IDomainRiskAnalyzer domainRiskAnalyzer)
         {
             _logger = logger;
             _domainAnalyzer = domainAnalyzer;
+            _domainRiskAnalyzer = domainRiskAnalyzer;
         }
 
         public async Task<IActionResult> Index(string? domain = null)
@@ -24,6 +27,7 @@ namespace SSA_Final.Controllers
             _logger.LogInformation("ScanResults.Index accessed at {Time}", DateTime.UtcNow);
 
             DomainAnalysisResult? result = null;
+            DomainRiskAnalysisResult? riskResult = null;
 
             if (!string.IsNullOrWhiteSpace(domain))
             {
@@ -35,9 +39,15 @@ namespace SSA_Final.Controllers
                 _logger.LogInformation(
                     "IDomainAnalyzer returned Suspicious={IsSuspicious} for {Domain}",
                     result.IsSuspicious, domain);
+
+                _logger.LogInformation(
+                    "Calling IDomainRiskAnalyzer.AnalyzeDomainRisk from ScanResultsController for {Domain}", domain);
+
+                riskResult = _domainRiskAnalyzer.AnalyzeDomainRisk(domain);
             }
 
             ViewBag.AnalysisResult = result;
+            ViewBag.RiskAnalysisResult = riskResult;
 
             return View();
         }
