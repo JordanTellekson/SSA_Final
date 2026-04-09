@@ -33,6 +33,7 @@ builder.Services.AddDbContext<SSA_FinalContext>(options =>
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IDomainRiskAnalyzer, DomainRiskAnalyzerService>();
+builder.Services.AddScoped<IResultsInitializer, ResultsInitializerService>();
 
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService  (Scoped).");

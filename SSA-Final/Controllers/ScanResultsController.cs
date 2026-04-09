@@ -11,15 +11,18 @@ namespace SSA_Final.Controllers
         private readonly ILogger<ScanResultsController> _logger;
         private readonly IDomainAnalyzer _domainAnalyzer;
         private readonly IDomainRiskAnalyzer _domainRiskAnalyzer;
+        private readonly IResultsInitializer _resultsInitializer;
 
         public ScanResultsController(
             ILogger<ScanResultsController> logger,
             IDomainAnalyzer domainAnalyzer,
-            IDomainRiskAnalyzer domainRiskAnalyzer)
+            IDomainRiskAnalyzer domainRiskAnalyzer,
+            IResultsInitializer resultsInitializer)
         {
             _logger = logger;
             _domainAnalyzer = domainAnalyzer;
             _domainRiskAnalyzer = domainRiskAnalyzer;
+            _resultsInitializer = resultsInitializer;
         }
 
         public async Task<IActionResult> Index(string? domain = null)
@@ -49,7 +52,10 @@ namespace SSA_Final.Controllers
             ViewBag.AnalysisResult = result;
             ViewBag.RiskAnalysisResult = riskResult;
 
-            return View();
+            // Placeholder data for initial result set
+            var results = _resultsInitializer.GetInitialResults();
+
+            return View(results);
         }
     }
 }
