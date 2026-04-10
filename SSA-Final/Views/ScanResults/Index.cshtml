@@ -1,4 +1,5 @@
-﻿@model List<DiscoveredDomain>
+﻿@using SSA_Final.Models
+@model List<DomainScan>
 
 @{
     ViewData["Title"] = "Scan Results";
@@ -7,31 +8,46 @@
 
 <h1>Scan Results</h1>
 
-<table class="table">
-    <thead>
-        <tr>
-            <th>Domain</th>
-            <th>Status</th>
-            <th>Reason</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var domain in Model)
-        {
+@if (!Model.Any())
+{
+    <p class="text-muted">No scans yet. <a asp-controller="Dashboard" asp-action="Index">Start a scan.</a></p>
+}
+else
+{
+    <table class="table table-hover">
+        <thead>
             <tr>
-                <td>@domain.DomainName</td>
-                <td>
-                    @if (domain.IsMalicious)
-                    {
-                        <span style="color: red;">Malicious</span>
-                    }
-                    else
-                    {
-                        <span style="color: green;">Safe</span>
-                    }
-                </td>
-                <td>@domain.Reason</td>
+                <th>Base Domain</th>
+                <th>Scanned At</th>
+                <th>Variants</th>
+                <th>Suspicious</th>
+                <th>Status</th>
+                <th></th>
             </tr>
-        }
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            @foreach (var scan in Model)
+            {
+                <tr>
+                    <td><strong>@scan.BaseDomain</strong></td>
+                    <td>@scan.ScannedAt.ToLocalTime().ToString("g")</td>
+                    <td>@scan.Variants.Count</td>
+                    <td>
+                        @if (scan.MaliciousCount > 0)
+                        {
+                            <span class="badge bg-danger">@scan.MaliciousCount</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success">0</span>
+                        }
+                    </td>
+                    <td>@scan.Status</td>
+                    <td>
+                        <a asp-action="Details" asp-route-id="@scan.Id" class="btn btn-sm btn-outline-primary">View Details</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
