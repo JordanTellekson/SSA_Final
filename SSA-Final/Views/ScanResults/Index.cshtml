@@ -1,8 +1,37 @@
-﻿@{
+﻿@model List<DiscoveredDomain>
+
+@{
     ViewData["Title"] = "Scan Results";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
 <h1>Scan Results</h1>
 
-<p>This will be where you can view scan results.</p>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Domain</th>
+            <th>Status</th>
+            <th>Reason</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var domain in Model)
+        {
+            <tr>
+                <td>@domain.DomainName</td>
+                <td>
+                    @if (domain.IsMalicious)
+                    {
+                        <span style="color: red;">Malicious</span>
+                    }
+                    else
+                    {
+                        <span style="color: green;">Safe</span>
+                    }
+                </td>
+                <td>@domain.Reason</td>
+            </tr>
+        }
+    </tbody>
+</table>
