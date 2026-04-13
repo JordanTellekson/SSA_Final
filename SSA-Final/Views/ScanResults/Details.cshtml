@@ -1,0 +1,82 @@
+﻿@using SSA_Final.Models
+@model DomainScan
+
+@{
+    ViewData["Title"] = $"Scan Results — {Model.BaseDomain}";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="d-flex align-items-center gap-3 mb-3">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; All Scans</a>
+    <h1 class="mb-0">@Model.BaseDomain</h1>
+    @if (Model.Status == DomainScanStatus.CompleteWithResults)
+    {
+        <span class="badge bg-danger fs-6">@Model.MaliciousCount suspicious</span>
+    }
+    else
+    {
+        <span class="badge bg-success fs-6">Clean</span>
+    }
+</div>
+
+<p class="text-muted">
+    Scanned at @Model.ScannedAt.ToLocalTime().ToString("f") &nbsp;&middot;&nbsp;
+    @Model.Variants.Count variant(s) analyzed &nbsp;&middot;&nbsp;
+    Scan ID: <code>@Model.Id</code>
+</p>
+
+<hr />
+
+@if (!Model.Variants.Any())
+{
+    <p>No variants were generated for this domain.</p>
+}
+else
+{
+    <table class="table table-bordered">
+        <thead class="table-light">
+            <tr>
+                <th>Discovered Domain</th>
+                <th>Status</th>
+                <th>Summary</th>
+                <th>Indicators</th>
+                <th>Analyzed At</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var variant in Model.Variants)
+            {
+                <tr class="@(variant.IsSuspicious ? "table-danger" : "")">
+                    <td><code>@variant.Domain</code></td>
+                    <td>
+                        @if (variant.IsSuspicious)
+                        {
+                            <span class="badge bg-danger">Suspicious</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success">Safe</span>
+                        }
+                    </td>
+                    <td>@variant.Summary</td>
+                    <td>
+                        @if (variant.Indicators.Any())
+                        {
+                            <ul class="mb-0 ps-3">
+                                @foreach (var indicator in variant.Indicators)
+                                {
+                                    <li>@indicator</li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </td>
+                    <td>@variant.AnalysedAt.ToLocalTime().ToString("t")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
