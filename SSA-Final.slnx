@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="SSA-Final/SSA-Final.csproj" />
-  <Project Path="SSA-Final.Tests/SSA-Final.Tests.csproj" />
+  <Project Path="SSA-Final.Tests/SSA-Final.Tests.csproj">
+    <Build Solution="Debug|*" Project="false" />
+  </Project>
 </Solution>
