@@ -12,7 +12,6 @@ builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 
-// Log that the application is starting
 var logger = LoggerFactory.Create(config =>
 {
     config.AddConsole();
@@ -27,8 +26,9 @@ var connectionString = builder.Configuration.GetConnectionString("SSA_FinalConte
 builder.Services.AddDbContext<SSA_FinalContext>(options =>
 {
     options.UseSqlServer(connectionString);
-    logger.LogInformation("Database context configured with connection string.");
 });
+
+logger.LogInformation("Database context configured with connection string.");
 
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
@@ -36,7 +36,7 @@ builder.Services.AddScoped<IDomainRiskAnalyzer, DomainRiskAnalyzerService>();
 builder.Services.AddSingleton<IDomainScanRepository, InMemoryDomainScanRepository>();
 
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
-logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService  (Scoped).");
+logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IDomainRiskAnalyzer -> DomainRiskAnalyzerService (Scoped).");
 logger.LogInformation("Registered IDomainScanRepository -> InMemoryDomainScanRepository (Singleton).");
 

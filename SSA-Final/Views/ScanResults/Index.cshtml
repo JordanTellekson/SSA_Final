@@ -1,8 +1,53 @@
-﻿@{
+﻿@using SSA_Final.Models
+@model List<DomainScan>
+
+@{
     ViewData["Title"] = "Scan Results";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
 <h1>Scan Results</h1>
 
-<p>This will be where you can view scan results.</p>
+@if (!Model.Any())
+{
+    <p class="text-muted">No scans yet. <a asp-controller="Dashboard" asp-action="Index">Start a scan.</a></p>
+}
+else
+{
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Base Domain</th>
+                <th>Scanned At</th>
+                <th>Variants</th>
+                <th>Suspicious</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var scan in Model)
+            {
+                <tr>
+                    <td><strong>@scan.BaseDomain</strong></td>
+                    <td>@scan.ScannedAt.ToLocalTime().ToString("g")</td>
+                    <td>@scan.Variants.Count</td>
+                    <td>
+                        @if (scan.MaliciousCount > 0)
+                        {
+                            <span class="badge bg-danger">@scan.MaliciousCount</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success">0</span>
+                        }
+                    </td>
+                    <td>@scan.Status</td>
+                    <td>
+                        <a asp-action="Details" asp-route-id="@scan.Id" class="btn btn-sm btn-outline-primary">View Details</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

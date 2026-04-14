@@ -1,53 +1,37 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
-using SSA_Final.Models;
 
 namespace SSA_Final.Controllers
 {
+    [Authorize]
     public class ScanResultsController : Controller
     {
         private readonly ILogger<ScanResultsController> _logger;
-        private readonly IDomainAnalyzer _domainAnalyzer;
-        private readonly IDomainRiskAnalyzer _domainRiskAnalyzer;
+        private readonly IScanStore _scanStore;
 
-        public ScanResultsController(
-            ILogger<ScanResultsController> logger,
-            IDomainAnalyzer domainAnalyzer,
-            IDomainRiskAnalyzer domainRiskAnalyzer)
+        public ScanResultsController(ILogger<ScanResultsController> logger, IScanStore scanStore)
         {
             _logger = logger;
-            _domainAnalyzer = domainAnalyzer;
-            _domainRiskAnalyzer = domainRiskAnalyzer;
+            _scanStore = scanStore;
         }
 
-        public async Task<IActionResult> Index(string? domain = null)
+        public IActionResult Index()
         {
-            _logger.LogInformation("ScanResults.Index accessed at {Time}", DateTime.UtcNow);
+            var scans = _scanStore.GetAll();
+            return View(scans);
+        }
 
-            DomainAnalysisResult? result = null;
-            DomainRiskAnalysisResult? riskResult = null;
-
-            if (!string.IsNullOrWhiteSpace(domain))
+        public IActionResult Details(Guid id)
+        {
+            var scan = _scanStore.GetById(id);
+            if (scan is null)
             {
-                _logger.LogInformation(
-                    "Calling IDomainAnalyzer.Analyze from ScanResultsController for {Domain}", domain);
-
-                result = await _domainAnalyzer.Analyze(domain);
-
-                _logger.LogInformation(
-                    "IDomainAnalyzer returned Suspicious={IsSuspicious} for {Domain}",
-                    result.IsSuspicious, domain);
-
-                _logger.LogInformation(
-                    "Calling IDomainRiskAnalyzer.AnalyzeDomainRisk from ScanResultsController for {Domain}", domain);
-
-                riskResult = _domainRiskAnalyzer.AnalyzeDomainRisk(domain);
+                _logger.LogWarning("Scan {Id} not found.", id);
+                return NotFound();
             }
 
-            ViewBag.AnalysisResult = result;
-            ViewBag.RiskAnalysisResult = riskResult;
-
-            return View();
+            return View(scan);
         }
     }
 }

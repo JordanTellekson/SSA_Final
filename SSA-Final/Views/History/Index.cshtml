@@ -1,90 +1,73 @@
-﻿@{
+﻿@using SSA_Final.Models
+@model List<DomainScan>
+
+@{
     ViewData["Title"] = "History";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
-<style>
-    .orb {
-        --orb-color: #f00;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        box-shadow: 0 0 10px var(--orb-color);
-        background-color: var(--orb-color);
-        z-index: 99;
-    }
 
-    .orb-success {
-        --orb-color: #00a800;
-    }
+<h1>Scan History</h1>
 
-    .orb-warning {
-        --orb-color: #d10808;
-    }
+@if (!Model.Any())
+{
+    <p class="text-muted">No scans yet. <a asp-controller="Dashboard" asp-action="Index">Start a scan.</a></p>
+}
+else
+{
+    <ul class="list-group">
+        @foreach (var scan in Model)
+        {
+            string orbClass;
+            string tooltip;
+            switch (scan.Status)
+            {
+                case DomainScanStatus.Complete:
+                    orbClass = "orb-success";
+                    tooltip = "Scan complete — no threats found";
+                    break;
+                case DomainScanStatus.CompleteWithResults:
+                    orbClass = "orb-warning";
+                    tooltip = $"Scan complete — {scan.MaliciousCount} suspicious domain(s)";
+                    break;
+                default:
+                    orbClass = "orb-pending";
+                    tooltip = "Scan in progress";
+                    break;
+            }
 
-    .orb-pending {
-        --orb-color: #d1d108;
-        animation: pulse 2s infinite;
-    }
+            <li class="list-group-item d-flex align-items-center gap-3">
+                <div class="orb @orbClass flex-shrink-0"
+                     data-bs-toggle="tooltip"
+                     data-bs-title="@tooltip"></div>
 
-    @@keyframes pulse {
-        0% {
-            filter: brightness(100%);
-        }
-        50% {
-            filter: brightness(50%);
-        }
-        100% {
-            filter: brightness(100%);
-        }
-    }
-</style>
+                <div class="flex-grow-1">
+                    <strong>@scan.BaseDomain</strong>
+                    <small class="text-muted ms-2">@scan.ScannedAt.ToLocalTime().ToString("g")</small>
+                </div>
 
-<h1>Scan history</h1>
-
-<ul class="list-group">
-    @foreach (DomainScan scan in Model ?? Enumerable.Empty<DomainScan>())
-    {
-        <li class="list-group-item d-flex dropdown ">
-
-            <a href="#" role="button" data-bs-toggle="dropdown" aria-expanded="true" class="stretched-link show"></a>
-            <div class="d-flex justify-content-center align-items-center me-5">
-                @{
-                    string orbClass = "orb-pending";
-                    string tooltipText = "";
-                    switch (scan.Status)
+                <div class="d-flex gap-3 align-items-center">
+                    @if (scan.MaliciousCount > 0)
                     {
-                        case DomainScanStatus.Complete:
-                            orbClass = "orb-success";
-                            tooltipText = "Scan complete";
-                            break;
-                        case DomainScanStatus.CompleteWithResults:
-                            orbClass = "orb-warning";
-                            tooltipText = "Scan complete, malicious domains found";
-                            break;
-                        default:
-                            orbClass = "orb-pending";
-                            tooltipText = "Scan in progress";
-                            break;
+                        <span class="badge bg-danger">@scan.MaliciousCount suspicious</span>
                     }
-                }
-                <div class="orb @orbClass" data-bs-toggle="tooltip" data-bs-title="@tooltipText"></div>
-            </div>
-            <b>@scan.Domain</b>
-            <ul class="dropdown-menu" data-popper-placement="bottom-start">
-                <li><span class="dropdown-item">@scan.NumMaliciousDomains malicious domains found</span></li>
-                <li><span class="dropdown-item">Completed at @scan.TimeFinished</span></li>
-                <li><span class="dropdown-item">Scan ID: DE60632BF298388F1FC01F20</span></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="#">Go to scan</a></li>
-            </ul>
-        </li>
-    }
-</ul>
+                    else if (scan.Status == DomainScanStatus.Complete)
+                    {
+                        <span class="badge bg-success">Clean</span>
+                    }
+                    <span class="text-muted small">@scan.Variants.Count variant(s)</span>
+                    <a asp-controller="ScanResults" asp-action="Details" asp-route-id="@scan.Id"
+                           class="btn btn-sm btn-outline-primary">
+                        View Scan
+                    </a>
+                </div>
+            </li>
+        }
+    </ul>
+}
 
 @section Scripts {
     <script>
-        // register tooltips
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
-        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+        const tooltipList = [...tooltipTriggerList].map(el => new bootstrap.Tooltip(el))
     </script>
 }

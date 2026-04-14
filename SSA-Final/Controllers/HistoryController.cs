@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
 using SSA_Final.Models;
 
 namespace SSA_Final.Controllers
 {
+    [Authorize]
     public class HistoryController : Controller
     {
         private readonly ILogger<HistoryController> _logger;

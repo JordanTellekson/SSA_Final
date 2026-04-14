@@ -27,7 +27,7 @@ namespace SSA_Final.Controllers
         }
 
         [HttpGet]
-        public ActionResult Index()
+        public IActionResult Index()
         {
             _logger.LogInformation("Dashboard Index accessed at {Time}", DateTime.UtcNow);
 
@@ -39,54 +39,24 @@ namespace SSA_Final.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<ActionResult> Index(string domain)
+        public async Task<IActionResult> Index(DomainScanViewModel model)
         {
             ViewBag.Domain = domain;
             ViewBag.Scans = _domainScanRepository.GetAll();
 
-            if (string.IsNullOrWhiteSpace(domain))
+            var baseDomain = model.Domain.Trim().ToLower();
+            _logger.LogInformation("Initiating scan for domain: {Domain}", baseDomain);
+
+            var variants = _domainGenerator.GenerateVariations(baseDomain).ToList();
+
+            var analysisResults = new List<DomainAnalysisResult>();
+            foreach (var variant in variants)
             {
-                ModelState.AddModelError("domain", "Domain is required.");
-                return View();
+                var result = await _domainAnalyzer.Analyze(variant);
+                analysisResults.Add(result);
             }
 
-            var isValidDomain = System.Text.RegularExpressions.Regex.IsMatch(
-                domain,
-                @"^(?!:\/\/)([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$"
-            );
-
-            if (!isValidDomain)
-            {
-                ModelState.AddModelError("domain", "Enter a valid domain (e.g. example.com)");
-                return View();
-            }
-
-            var normalizedDomain = domain.Trim().ToLower();
-            _logger.LogInformation(
-                "Initiating scan for domain: {Domain}", normalizedDomain);
-
-            // Generate variations
-            _logger.LogInformation(
-                "Calling IDomainGenerator.GenerateVariations for {Domain}", normalizedDomain);
-
-            var variations = _domainGenerator.GenerateVariations(normalizedDomain).ToList();
-
-            _logger.LogInformation(
-                "IDomainGenerator produced {Count} variation(s) for {Domain}",
-                variations.Count, normalizedDomain);
-
-            // Analyze domain
-            _logger.LogInformation(
-                "Calling IDomainAnalyzer.Analyze for {Domain}", normalizedDomain);
-
-            var analysisResult = await _domainAnalyzer.Analyze(normalizedDomain);
-
-            _logger.LogInformation(
-                "IDomainAnalyzer returned Suspicious={IsSuspicious} for {Domain}",
-                analysisResult.IsSuspicious, normalizedDomain);
-
-            // Persist scan record
-            var domainScan = new DomainScan
+            var scan = new DomainScan
             {
                 BaseDomain = normalizedDomain,
                 ScanDate = DateTime.UtcNow,
@@ -109,12 +79,11 @@ namespace SSA_Final.Controllers
 
             _domainScanRepository.Create(domainScan);
 
-            ViewBag.Variations = variations;
-            ViewBag.AnalysisResult = analysisResult;
-            ViewBag.Success = $"Scan created for {normalizedDomain}";
-            ViewBag.Domain = string.Empty;
+            _logger.LogInformation(
+                "Scan {Id} complete for {Domain}: {Count} variant(s), {Malicious} suspicious.",
+                scan.Id, baseDomain, analysisResults.Count, scan.MaliciousCount);
 
-            return View();
+            return RedirectToAction("Details", "ScanResults", new { id = scan.Id });
         }
     }
 }
