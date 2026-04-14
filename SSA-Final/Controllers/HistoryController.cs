@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
+using SSA_Final.Interfaces;
 using SSA_Final.Models;
 
 namespace SSA_Final.Controllers
@@ -6,54 +7,81 @@ namespace SSA_Final.Controllers
     public class HistoryController : Controller
     {
         private readonly ILogger<HistoryController> _logger;
+        private readonly IDomainScanRepository _domainScanRepository;
 
-        public HistoryController(ILogger<HistoryController> logger)
+        public HistoryController(
+            ILogger<HistoryController> logger,
+            IDomainScanRepository domainScanRepository)
         {
             _logger = logger;
+            _domainScanRepository = domainScanRepository;
         }
 
         public IActionResult Index()
         {
-            List<DomainScan> scans = new();
-            DomainScan scan = new()
+            if (_domainScanRepository.GetAll().Count == 0)
             {
-                Domain = "google.com",
-                CreatedAt = DateTime.Now.AddDays(-1),
-                TimeFinished = DateTime.Now,
-                NumMaliciousDomains = 5,
-                Status = DomainScanStatus.CompleteWithResults
-            };
-            scans.Add(scan);
-            scan = new()
-            {
-                Domain = "mstc.edu",
-                CreatedAt = DateTime.Now.AddDays(-2),
-                TimeFinished = DateTime.Now.AddDays(-1),
-                NumMaliciousDomains = 0,
-                Status = DomainScanStatus.Complete
-            };
-            scans.Add(scan);
-            scan = new()
-            {
-                Domain = "yetanotherdomain.com",
-                CreatedAt = DateTime.Now.AddDays(-2),
-                TimeFinished = DateTime.Now.AddDays(-1),
-                NumMaliciousDomains = 0,
-                Status = DomainScanStatus.Complete
-            };
-            scans.Add(scan);
-            scan = new()
-            {
-                Domain = "example.com",
-                CreatedAt = DateTime.Now.AddDays(-3),
-                TimeFinished = DateTime.Now.AddDays(-2),
-                NumMaliciousDomains = 0,
-                Status = DomainScanStatus.InProgress
-            };
-            scans.Add(scan);
+                SeedHistory();
+            }
+
             _logger.LogInformation("History page loaded");
 
-            return View(scans);
+            return View(_domainScanRepository.GetAll());
+        }
+
+        private void SeedHistory()
+        {
+            _domainScanRepository.Create(new DomainScan
+            {
+                BaseDomain = "google.com",
+                ScanDate = DateTime.UtcNow.AddDays(-1),
+                TimeFinished = DateTime.UtcNow,
+                Status = DomainScanStatus.CompleteWithResults,
+                Results = new List<DomainAnalysisResult>
+                {
+                    new()
+                    {
+                        DomainName = "goog1e.com",
+                        IsSuspicious = true,
+                        Reason = "Typosquatting pattern detected",
+                        Notes = "Looks visually similar to google.com"
+                    }
+                },
+                RiskAnalyses = new List<DomainRiskAnalysis>
+                {
+                    new()
+                    {
+                        DomainName = "goog1e.com",
+                        IsSuspicious = true,
+                        Reason = "Typosquatting pattern detected",
+                        Notes = "Looks visually similar to google.com"
+                    }
+                }
+            });
+
+            _domainScanRepository.Create(new DomainScan
+            {
+                BaseDomain = "mstc.edu",
+                ScanDate = DateTime.UtcNow.AddDays(-2),
+                TimeFinished = DateTime.UtcNow.AddDays(-1),
+                Status = DomainScanStatus.Complete
+            });
+
+            _domainScanRepository.Create(new DomainScan
+            {
+                BaseDomain = "yetanotherdomain.com",
+                ScanDate = DateTime.UtcNow.AddDays(-2),
+                TimeFinished = DateTime.UtcNow.AddDays(-1),
+                Status = DomainScanStatus.Complete
+            });
+
+            _domainScanRepository.Create(new DomainScan
+            {
+                BaseDomain = "example.com",
+                ScanDate = DateTime.UtcNow.AddDays(-3),
+                TimeFinished = DateTime.UtcNow.AddDays(-2),
+                Status = DomainScanStatus.InProgress
+            });
         }
     }
 }

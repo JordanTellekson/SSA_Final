@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="SSA-Final/SSA-Final.csproj" />
+  <Project Path="SSA-Final.Tests/SSA-Final.Tests.csproj" />
 </Solution>

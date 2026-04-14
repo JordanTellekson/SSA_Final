@@ -24,9 +24,10 @@ namespace SSA_Final.Services
 
                 return new DomainAnalysisResult
                 {
-                    Domain = domain ?? string.Empty,
+                    DomainName = domain ?? string.Empty,
                     IsSuspicious = false,
-                    Summary = "No domain supplied — analysis skipped.",
+                    Reason = "No domain supplied - analysis skipped.",
+                    Notes = "Input domain was null or whitespace.",
                     AnalysedAt = DateTime.UtcNow
                 };
             }
@@ -37,9 +38,10 @@ namespace SSA_Final.Services
 
             var result = new DomainAnalysisResult
             {
-                Domain = domain,
+                DomainName = domain,
                 IsSuspicious = false,
-                Summary = "Stub analysis complete — no indicators detected.",
+                Reason = "Stub analysis complete - no indicators detected.",
+                Notes = "Replace with production checks (WHOIS, DNS fingerprints, blocklists, brand similarity).",
                 AnalysedAt = DateTime.UtcNow
             };
 

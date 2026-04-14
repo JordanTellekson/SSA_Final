@@ -9,21 +9,21 @@ namespace SSA_Final.Controllers
     [Authorize]
     public class DashboardController : Controller
     {
-        // In-memory storage (for now)
-        private static readonly List<DomainScan> _scans = new();
-
         private readonly ILogger<DashboardController> _logger;
         private readonly IDomainGenerator _domainGenerator;
         private readonly IDomainAnalyzer _domainAnalyzer;
+        private readonly IDomainScanRepository _domainScanRepository;
 
         public DashboardController(
             ILogger<DashboardController> logger,
             IDomainGenerator domainGenerator,
-            IDomainAnalyzer domainAnalyzer)
+            IDomainAnalyzer domainAnalyzer,
+            IDomainScanRepository domainScanRepository)
         {
             _logger = logger;
             _domainGenerator = domainGenerator;
             _domainAnalyzer = domainAnalyzer;
+            _domainScanRepository = domainScanRepository;
         }
 
         [HttpGet]
@@ -32,7 +32,7 @@ namespace SSA_Final.Controllers
             _logger.LogInformation("Dashboard Index accessed at {Time}", DateTime.UtcNow);
 
             var model = new DomainScanViewModel();
-            ViewBag.Scans = _scans;
+            ViewBag.Scans = _domainScanRepository.GetAll();
 
             return View(model);
         }
@@ -42,7 +42,7 @@ namespace SSA_Final.Controllers
         public async Task<ActionResult> Index(string domain)
         {
             ViewBag.Domain = domain;
-            ViewBag.Scans = _scans;
+            ViewBag.Scans = _domainScanRepository.GetAll();
 
             if (string.IsNullOrWhiteSpace(domain))
             {
@@ -88,11 +88,26 @@ namespace SSA_Final.Controllers
             // Persist scan record
             var domainScan = new DomainScan
             {
-                Domain = normalizedDomain,
-                CreatedAt = DateTime.UtcNow
+                BaseDomain = normalizedDomain,
+                ScanDate = DateTime.UtcNow,
+                TimeFinished = DateTime.UtcNow,
+                Status = analysisResult.IsSuspicious
+                    ? DomainScanStatus.CompleteWithResults
+                    : DomainScanStatus.Complete,
+                Results = new List<DomainAnalysisResult> { analysisResult },
+                RiskAnalyses = new List<DomainRiskAnalysis>
+                {
+                    new()
+                    {
+                        DomainName = analysisResult.DomainName,
+                        IsSuspicious = analysisResult.IsSuspicious,
+                        Reason = analysisResult.Reason,
+                        Notes = analysisResult.Notes
+                    }
+                }
             };
 
-            _scans.Add(domainScan);
+            _domainScanRepository.Create(domainScan);
 
             ViewBag.Variations = variations;
             ViewBag.AnalysisResult = analysisResult;
