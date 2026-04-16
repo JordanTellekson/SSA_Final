@@ -25,18 +25,5 @@ namespace SSA_Final.Models
         /// </summary>
         public IList<string> Indicators { get; set; } = new List<string>();
 
-        // Backward-compatible alias for older code paths.
-        public string Domain
-        {
-            get => DomainName;
-            set => DomainName = value ?? string.Empty;
-        }
-
-        // Backward-compatible alias for older code paths.
-        public string Summary
-        {
-            get => Reason;
-            set => Reason = value ?? string.Empty;
-        }
     }
 }

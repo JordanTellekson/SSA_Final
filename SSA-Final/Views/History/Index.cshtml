@@ -27,7 +27,7 @@ else
                     break;
                 case DomainScanStatus.CompleteWithResults:
                     orbClass = "orb-warning";
-                    tooltip = $"Scan complete — {scan.MaliciousCount} suspicious domain(s)";
+                    tooltip = $"Scan complete — {scan.NumMaliciousDomains} suspicious domain(s)";
                     break;
                 default:
                     orbClass = "orb-pending";
@@ -42,19 +42,19 @@ else
 
                 <div class="flex-grow-1">
                     <strong>@scan.BaseDomain</strong>
-                    <small class="text-muted ms-2">@scan.ScannedAt.ToLocalTime().ToString("g")</small>
+                    <small class="text-muted ms-2">@scan.ScanDate.ToLocalTime().ToString("g")</small>
                 </div>
 
                 <div class="d-flex gap-3 align-items-center">
-                    @if (scan.MaliciousCount > 0)
+                    @if (scan.NumMaliciousDomains > 0)
                     {
-                        <span class="badge bg-danger">@scan.MaliciousCount suspicious</span>
+                        <span class="badge bg-danger">@scan.NumMaliciousDomains suspicious</span>
                     }
                     else if (scan.Status == DomainScanStatus.Complete)
                     {
                         <span class="badge bg-success">Clean</span>
                     }
-                    <span class="text-muted small">@scan.Variants.Count variant(s)</span>
+                    <span class="text-muted small">@scan.Results.Count variant(s)</span>
                     <a asp-controller="ScanResults" asp-action="Details" asp-route-id="@scan.Id"
                            class="btn btn-sm btn-outline-primary">
                         View Scan

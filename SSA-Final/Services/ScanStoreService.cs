@@ -15,7 +15,7 @@ namespace SSA_Final.Services
 
         public List<DomainScan> GetAll()
         {
-            lock (_lock) { return _scans.OrderByDescending(s => s.ScannedAt).ToList(); }
+            lock (_lock) { return _scans.OrderByDescending(s => s.ScanDate).ToList(); }
         }
 
         public DomainScan? GetById(Guid id)

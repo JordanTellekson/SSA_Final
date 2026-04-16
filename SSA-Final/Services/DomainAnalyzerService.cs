@@ -47,7 +47,7 @@ namespace SSA_Final.Services
 
             _logger.LogInformation(
                 "[DomainAnalyzerService] Analyze completed for {Domain}. Suspicious={IsSuspicious}",
-                result.Domain, result.IsSuspicious);
+                result.DomainName, result.IsSuspicious);
 
             return result;
         }

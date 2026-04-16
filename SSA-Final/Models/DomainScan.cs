@@ -18,19 +18,6 @@ namespace SSA_Final.Models
 
         public DomainScanStatus Status { get; set; } = DomainScanStatus.Pending;
 
-        // Backward-compatible aliases used by existing controllers/views
-        public string Domain
-        {
-            get => BaseDomain;
-            set => BaseDomain = value ?? string.Empty;
-        }
-
-        public DateTime CreatedAt
-        {
-            get => ScanDate;
-            set => ScanDate = value;
-        }
-
         public int NumMaliciousDomains
         {
             get => RiskAnalyses.Count != 0

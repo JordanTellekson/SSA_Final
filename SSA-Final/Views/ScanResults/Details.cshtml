@@ -11,7 +11,7 @@
     <h1 class="mb-0">@Model.BaseDomain</h1>
     @if (Model.Status == DomainScanStatus.CompleteWithResults)
     {
-        <span class="badge bg-danger fs-6">@Model.MaliciousCount suspicious</span>
+        <span class="badge bg-danger fs-6">@Model.NumMaliciousDomains suspicious</span>
     }
     else
     {
@@ -20,14 +20,14 @@
 </div>
 
 <p class="text-muted">
-    Scanned at @Model.ScannedAt.ToLocalTime().ToString("f") &nbsp;&middot;&nbsp;
-    @Model.Variants.Count variant(s) analyzed &nbsp;&middot;&nbsp;
+    Scanned at @Model.ScanDate.ToLocalTime().ToString("f") &nbsp;&middot;&nbsp;
+    @Model.Results.Count variant(s) analyzed &nbsp;&middot;&nbsp;
     Scan ID: <code>@Model.Id</code>
 </p>
 
 <hr />
 
-@if (!Model.Variants.Any())
+@if (!Model.Results.Any())
 {
     <p>No variants were generated for this domain.</p>
 }
@@ -44,10 +44,10 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var variant in Model.Variants)
+            @foreach (var variant in Model.Results)
             {
                 <tr class="@(variant.IsSuspicious ? "table-danger" : "")">
-                    <td><code>@variant.Domain</code></td>
+                    <td><code>@variant.DomainName</code></td>
                     <td>
                         @if (variant.IsSuspicious)
                         {
@@ -58,7 +58,7 @@ else
                             <span class="badge bg-success">Safe</span>
                         }
                     </td>
-                    <td>@variant.Summary</td>
+                    <td>@variant.Reason</td>
                     <td>
                         @if (variant.Indicators.Any())
                         {

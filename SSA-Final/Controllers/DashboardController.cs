@@ -41,10 +41,15 @@ namespace SSA_Final.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Index(DomainScanViewModel model)
         {
-            ViewBag.Domain = domain;
-            ViewBag.Scans = _domainScanRepository.GetAll();
+            if (!ModelState.IsValid)
+            {
+                ViewBag.Scans = _domainScanRepository.GetAll();
+                return View(model);
+            }
 
-            var baseDomain = model.Domain.Trim().ToLower();
+            var baseDomain = model.Domain.Trim().ToLowerInvariant();
+            ViewBag.Domain = baseDomain;
+            ViewBag.Scans = _domainScanRepository.GetAll();
             _logger.LogInformation("Initiating scan for domain: {Domain}", baseDomain);
 
             var variants = _domainGenerator.GenerateVariations(baseDomain).ToList();
@@ -58,30 +63,29 @@ namespace SSA_Final.Controllers
 
             var scan = new DomainScan
             {
-                BaseDomain = normalizedDomain,
+                BaseDomain = baseDomain,
                 ScanDate = DateTime.UtcNow,
                 TimeFinished = DateTime.UtcNow,
-                Status = analysisResult.IsSuspicious
+                Status = analysisResults.Any(r => r.IsSuspicious)
                     ? DomainScanStatus.CompleteWithResults
                     : DomainScanStatus.Complete,
-                Results = new List<DomainAnalysisResult> { analysisResult },
-                RiskAnalyses = new List<DomainRiskAnalysis>
-                {
-                    new()
+                Results = analysisResults,
+                RiskAnalyses = analysisResults
+                    .Select(result => new DomainRiskAnalysis
                     {
-                        DomainName = analysisResult.DomainName,
-                        IsSuspicious = analysisResult.IsSuspicious,
-                        Reason = analysisResult.Reason,
-                        Notes = analysisResult.Notes
-                    }
-                }
+                        DomainName = result.DomainName,
+                        IsSuspicious = result.IsSuspicious,
+                        Reason = result.Reason,
+                        Notes = result.Notes
+                    })
+                    .ToList()
             };
 
-            _domainScanRepository.Create(domainScan);
+            _domainScanRepository.Create(scan);
 
             _logger.LogInformation(
                 "Scan {Id} complete for {Domain}: {Count} variant(s), {Malicious} suspicious.",
-                scan.Id, baseDomain, analysisResults.Count, scan.MaliciousCount);
+                scan.Id, baseDomain, analysisResults.Count, scan.NumMaliciousDomains);
 
             return RedirectToAction("Details", "ScanResults", new { id = scan.Id });
         }
