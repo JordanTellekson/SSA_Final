@@ -6,10 +6,10 @@ namespace SSA_Final.Services
     {
         private readonly ILogger<DomainGeneratorService> _logger;
         private const int MaxAddedSubdomains = 4;
-        private const int MaxAddedHyphens = 6;
+        private const int MaxAddedHyphens = 5;
         private const int MaxHyphenVariantsPerDomain = 3000;
         private static readonly string[] CommonTlds = ["com", "net", "org", "co", "io"];
-        private static readonly string[] SubdomainPrefixes = ["secure", "login", "account"];
+        private static readonly string[] SubdomainPrefixes = ["secure", "login", "account", "verify", "blog"];
 
         // QWERTY-adjacent keys for likely typo substitutions.
         private static readonly Dictionary<char, char[]> AdjacentKeys = new()
@@ -96,7 +96,7 @@ namespace SSA_Final.Services
             }
 
             var normalized = baseDomain.Trim().Trim('.').ToLowerInvariant();
-            if (!TrySplitDomain(normalized, out var subdomains, out var label, out var tld))
+            if (!SplitDomain(normalized, out var subdomains, out var label, out var tld))
             {
                 _logger.LogWarning(
                     "[DomainGeneratorService] Domain '{Domain}' could not be split into label + TLD.",
@@ -328,7 +328,7 @@ namespace SSA_Final.Services
             return entropy;
         }
 
-        private static bool TrySplitDomain(string domain, out string subdomains, out string label, out string tld)
+        private static bool SplitDomain(string domain, out string subdomains, out string label, out string tld)
         {
             subdomains = string.Empty;
             label = string.Empty;
