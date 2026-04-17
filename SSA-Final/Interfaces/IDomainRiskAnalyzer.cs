@@ -6,6 +6,6 @@ namespace SSA_Final.Interfaces
     {
         bool IsKnownActiveDomain(string? domainInput);
 
-        DomainRiskAnalysisResult AnalyzeDomainRisk(string? domainInput);
+        Task<DomainRiskAnalysisResult> AnalyzeDomainRiskAsync(string? domainInput);
     }
 }
