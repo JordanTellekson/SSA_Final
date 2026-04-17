@@ -34,11 +34,37 @@ builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IDomainRiskAnalyzer, DomainRiskAnalyzerService>();
 builder.Services.AddSingleton<IScanStore, ScanStoreService>();
+builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
+
+var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
+var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
+
+// 1. NoRedirect Client
+builder.Services.AddHttpClient("DomainAnalyzer.NoRedirect", client => {
+    client.Timeout = timeoutSpan;
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AllowAutoRedirect = false,
+    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+});
+
+// 2. Follow Client
+builder.Services.AddHttpClient("DomainAnalyzer.Follow", client => {
+    client.Timeout = timeoutSpan;
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AllowAutoRedirect = true,
+    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+});
 
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IDomainRiskAnalyzer -> DomainRiskAnalyzerService (Scoped).");
 logger.LogInformation("Registered IScanStore -> ScanStoreService (Singleton).");
+logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
+logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow.");
 
 // Configure Identity
 builder.Services.AddDefaultIdentity<IdentityUser>(options =>
