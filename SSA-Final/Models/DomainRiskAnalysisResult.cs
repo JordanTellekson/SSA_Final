@@ -11,7 +11,10 @@ namespace SSA_Final.Models
             DomainRiskSignalScore typosquattingEditDistance,
             DomainRiskSignalScore excessiveSubdomains,
             DomainRiskSignalScore hyphenAbuse,
-            DomainRiskSignalScore shannonEntropy)
+            DomainRiskSignalScore shannonEntropy,
+            bool isBlocklistMatch = false,
+            string? blocklistSource = null,
+            bool usedBlocklistFallback = false)
         {
             InputDomain = inputDomain;
             IsKnownActiveDomain = isKnownActiveDomain;
@@ -21,6 +24,9 @@ namespace SSA_Final.Models
             ExcessiveSubdomains = excessiveSubdomains;
             HyphenAbuse = hyphenAbuse;
             ShannonEntropy = shannonEntropy;
+            IsBlocklistMatch = isBlocklistMatch;
+            BlocklistSource = blocklistSource;
+            UsedBlocklistFallback = usedBlocklistFallback;
         }
 
         public string InputDomain { get; }
@@ -39,6 +45,13 @@ namespace SSA_Final.Models
 
         public DomainRiskSignalScore ShannonEntropy { get; }
 
+        // Extension properties to help connect to the PhishingBlocklistService
+        public bool IsBlocklistMatch { get; }
+
+        public string? BlocklistSource { get; }
+
+        public bool UsedBlocklistFallback { get; }
+
         public static DomainRiskAnalysisResult InvalidInput()
         {
             // Keeps consumer code simple by returning a fully-shaped object for invalid input.
@@ -51,7 +64,8 @@ namespace SSA_Final.Models
                 typosquattingEditDistance: emptySignal,
                 excessiveSubdomains: emptySignal,
                 hyphenAbuse: emptySignal,
-                shannonEntropy: emptySignal);
+                shannonEntropy: emptySignal,
+                isBlocklistMatch: false);
         }
 
         public static DomainRiskAnalysisResult ForKnownActiveDomain(string domain)
@@ -66,7 +80,8 @@ namespace SSA_Final.Models
                 typosquattingEditDistance: noRisk,
                 excessiveSubdomains: noRisk,
                 hyphenAbuse: noRisk,
-                shannonEntropy: noRisk);
+                shannonEntropy: noRisk,
+                isBlocklistMatch: false);
         }
     }
 }

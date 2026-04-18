@@ -20,9 +20,9 @@ namespace SSA_Final.Controllers
         }
 
         [HttpGet("analyze")]
-        public ActionResult<DomainRiskAnalysisResult> Analyze([FromQuery] string? domain)
+        public async Task<ActionResult<DomainRiskAnalysisResult>> Analyze([FromQuery] string? domain)
         {
-            var result = _domainRiskAnalyzer.AnalyzeDomainRisk(domain);
+            var result = await _domainRiskAnalyzer.AnalyzeDomainRiskAsync(domain);
             if (!result.IsValidDomain)
             {
                 return BadRequest(result);
