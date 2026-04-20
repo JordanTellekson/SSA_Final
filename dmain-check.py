@@ -1,32 +1,79 @@
-import whois
-from datetime import datetime
+using System;
+using System.Text.RegularExpressions;
+using Whois.NET;
 
-def check_domain(domain):
-    try:
-        w = whois.whois(domain)
+class Program
+{
+    static void CheckDomain(string domain)
+    {
+        try
+        {
+            WhoisResponse response = WhoisClient.Query(domain);
 
-        creation_date = w.creation_date
+            string rawWhois = response.Raw;
 
-        # sometimes WHOIS returns a list
-        if isinstance(creation_date, list):
-            creation_date = creation_date[0]
+            DateTime? creationDate = ExtractCreationDate(rawWhois);
 
-        if creation_date:
-            age_days = (datetime.now(creation_date.tzinfo) - creation_date).days
+            if (creationDate.HasValue)
+            {
+                DateTime created = creationDate.Value;
+                int ageDays = (DateTime.Now - created).Days;
 
-            print(f"Domain: {domain}")
-            print(f"Created: {creation_date}")
-            print(f"Age: {age_days} days")
+                Console.WriteLine($"Domain: {domain}");
+                Console.WriteLine($"Created: {created}");
+                Console.WriteLine($"Age: {ageDays} days");
 
-            if age_days < 30:
-                print("⚠️ Suspicious: Recently registered domain")
-            else:
-                print("✅ Looks normal")
-        else:
-            print("Could not determine creation date")
+                if (ageDays < 30)
+                {
+                    Console.WriteLine("Suspicious: Recently registered domain");
+                }
+                else
+                {
+                    Console.WriteLine("Looks normal");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Could not determine creation date");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking domain: {ex.Message}");
+        }
+    }
 
-    except Exception as e:
-        print("Error checking domain:", e)
+    static DateTime? ExtractCreationDate(string rawWhois)
+    {
+        string[] patterns =
+        {
+            @"Creation Date:\s*(.+)",
+            @"Created On:\s*(.+)",
+            @"Created:\s*(.+)",
+            @"Registration Date:\s*(.+)",
+            @"Domain Registration Date:\s*(.+)"
+        };
 
-# test it
-check_domain("google.com")       
+        foreach (string pattern in patterns)
+        {
+            Match match = Regex.Match(rawWhois, pattern, RegexOptions.IgnoreCase);
+
+            if (match.Success)
+            {
+                string dateText = match.Groups[1].Value.Trim();
+
+                if (DateTime.TryParse(dateText, out DateTime date))
+                {
+                    return date;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    static void Main()
+    {
+        CheckDomain("google.com");
+    }
+}
