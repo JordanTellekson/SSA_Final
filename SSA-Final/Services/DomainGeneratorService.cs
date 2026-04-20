@@ -6,7 +6,7 @@ namespace SSA_Final.Services
     {
         private readonly ILogger<DomainGeneratorService> _logger;
         private const int MaxAddedSubdomains = 4;
-        private const int MaxAddedHyphens = 6o;
+        private const int MaxAddedHyphens = 6;
         private const int MaxHyphenVariantsPerDomain = 3000;
         private static readonly string[] CommonTlds = ["com", "net", "org", "co", "io"];
         private static readonly string[] SubdomainPrefixes = ["secure", "login", "account", "verify", "blog"];
