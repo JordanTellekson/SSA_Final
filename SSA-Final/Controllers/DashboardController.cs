@@ -29,7 +29,12 @@ namespace SSA_Final.Controllers
         [HttpGet]
         public IActionResult Index()
         {
-            return View(new DomainScanViewModel());
+            var model = new DomainScanViewModel
+            {
+                ScanHistory = _scanStore.GetAll()
+            };
+
+            return View(model);
         }
 
         [HttpPost]
@@ -37,37 +42,60 @@ namespace SSA_Final.Controllers
         public async Task<IActionResult> Index(DomainScanViewModel model)
         {
             if (!ModelState.IsValid)
+            {
+                model.ScanHistory = _scanStore.GetAll();
                 return View(model);
+            }
 
             var baseDomain = model.Domain.Trim().ToLower();
             _logger.LogInformation("Initiating scan for domain: {Domain}", baseDomain);
 
-            var variants = _domainGenerator.GenerateVariations(baseDomain).ToList();
-
-            var analysisResults = new List<DomainAnalysisResult>();
-            foreach (var variant in variants)
-            {
-                var result = await _domainAnalyzer.Analyze(variant);
-                analysisResults.Add(result);
-            }
-
             var scan = new DomainScan
             {
                 BaseDomain = baseDomain,
-                ScannedAt = DateTime.UtcNow,
-                Variants = analysisResults,
-                Status = analysisResults.Any(r => r.IsSuspicious)
-                    ? DomainScanStatus.CompleteWithResults
-                    : DomainScanStatus.Complete
+                CreatedAt = DateTime.UtcNow,
+                Status = DomainScanStatus.InProgress,
+                NumMaliciousDomains = 0
             };
 
             _scanStore.Add(scan);
 
-            _logger.LogInformation(
-                "Scan {Id} complete for {Domain}: {Count} variant(s), {Malicious} suspicious.",
-                scan.Id, baseDomain, analysisResults.Count, scan.MaliciousCount);
+            try
+            {
+                var variants = _domainGenerator.GenerateVariations(baseDomain).ToList();
 
-            return RedirectToAction("Details", "ScanResults", new { id = scan.Id });
+                var analysisResults = new List<DomainAnalysisResult>();
+                foreach (var variant in variants)
+                {
+                    var result = await _domainAnalyzer.Analyze(variant);
+                    result.DomainScanId = scan.Id;
+                    analysisResults.Add(result);
+                }
+
+                scan.Variants = analysisResults;
+                scan.NumMaliciousDomains = analysisResults.Count(r => r.IsSuspicious);
+                scan.TimeFinished = DateTime.UtcNow;
+                scan.Status = DomainScanStatus.Completed;
+
+                _scanStore.Update(scan);
+
+                _logger.LogInformation(
+                    "Scan {Id} complete for {Domain}: {Count} variant(s), {Malicious} suspicious.",
+                    scan.Id, baseDomain, analysisResults.Count, scan.NumMaliciousDomains);
+
+                return RedirectToAction("Details", "ScanResults", new { id = scan.Id });
+            }
+            catch (Exception ex)
+            {
+                scan.TimeFinished = DateTime.UtcNow;
+                scan.Status = DomainScanStatus.Failed;
+                _scanStore.Update(scan);
+
+                _logger.LogError(ex, "Scan {Id} failed for {Domain}", scan.Id, baseDomain);
+                TempData["ScanError"] = "Scan failed. Please try again.";
+
+                return RedirectToAction("Details", "ScanResults", new { id = scan.Id });
+            }
         }
     }
 }

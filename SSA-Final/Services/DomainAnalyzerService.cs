@@ -24,7 +24,7 @@ namespace SSA_Final.Services
 
                 return new DomainAnalysisResult
                 {
-                    Domain = domain ?? string.Empty,
+                    DiscoveredDomain = domain ?? string.Empty,
                     IsSuspicious = false,
                     Summary = "No domain supplied — analysis skipped.",
                     AnalysedAt = DateTime.UtcNow
@@ -37,7 +37,7 @@ namespace SSA_Final.Services
 
             var result = new DomainAnalysisResult
             {
-                Domain = domain,
+                DiscoveredDomain = domain,
                 IsSuspicious = false,
                 Summary = "Stub analysis complete — no indicators detected.",
                 AnalysedAt = DateTime.UtcNow
@@ -45,7 +45,7 @@ namespace SSA_Final.Services
 
             _logger.LogInformation(
                 "[DomainAnalyzerService] Analyze completed for {Domain}. Suspicious={IsSuspicious}",
-                result.Domain, result.IsSuspicious);
+                result.DiscoveredDomain, result.IsSuspicious);
 
             return result;
         }

@@ -13,9 +13,21 @@ namespace SSA_Final.Services
             lock (_lock) { _scans.Add(scan); }
         }
 
+        public void Update(DomainScan scan)
+        {
+            lock (_lock)
+            {
+                var index = _scans.FindIndex(s => s.Id == scan.Id);
+                if (index >= 0)
+                {
+                    _scans[index] = scan;
+                }
+            }
+        }
+
         public List<DomainScan> GetAll()
         {
-            lock (_lock) { return _scans.OrderByDescending(s => s.ScannedAt).ToList(); }
+            lock (_lock) { return _scans.OrderByDescending(s => s.CreatedAt).ToList(); }
         }
 
         public DomainScan? GetById(Guid id)

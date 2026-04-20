@@ -33,12 +33,12 @@ logger.LogInformation("Database context configured with connection string.");
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IDomainRiskAnalyzer, DomainRiskAnalyzerService>();
-builder.Services.AddSingleton<IScanStore, ScanStoreService>();
+builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
 
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IDomainRiskAnalyzer -> DomainRiskAnalyzerService (Scoped).");
-logger.LogInformation("Registered IScanStore -> ScanStoreService (Singleton).");
+logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
 
 // Configure Identity
 builder.Services.AddDefaultIdentity<IdentityUser>(options =>
