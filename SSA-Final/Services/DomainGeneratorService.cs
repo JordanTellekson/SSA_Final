@@ -2,14 +2,11 @@ using SSA_Final.Interfaces;
 
 namespace SSA_Final.Services
 {
-    /// <summary>
-    /// Generates typosquatting-style domain variants using multiple mutation strategies.
-    /// </summary>
     public class DomainGeneratorService : IDomainGenerator
     {
         private readonly ILogger<DomainGeneratorService> _logger;
         private const int MaxAddedSubdomains = 4;
-        private const int MaxAddedHyphens = 5;
+        private const int MaxAddedHyphens = 6o;
         private const int MaxHyphenVariantsPerDomain = 3000;
         private static readonly string[] CommonTlds = ["com", "net", "org", "co", "io"];
         private static readonly string[] SubdomainPrefixes = ["secure", "login", "account", "verify", "blog"];
@@ -79,19 +76,12 @@ namespace SSA_Final.Services
             ["cl"] = ["d"]
         };
 
-        /// <summary>
-        /// Creates the variation generator service.
-        /// </summary>
         public DomainGeneratorService(ILogger<DomainGeneratorService> logger)
         {
             _logger = logger;
         }
 
-        /// <summary>
-        /// Generates distinct domain variations for the supplied base domain.
-        /// </summary>
-        /// <param name="baseDomain">Base domain used as mutation source.</param>
-        /// <returns>Distinct set of generated variation domains.</returns>
+        /// <inheritdoc />
         public IEnumerable<string> GenerateVariations(string baseDomain)
         {
             _logger.LogInformation(
@@ -137,7 +127,7 @@ namespace SSA_Final.Services
             return output;
         }
 
-        // Adds stacked prefix variations such as secure.example.com and secure-example.com.
+        // Adds subdomain- and prefix-based lookalikes such as secure.example.com and secure-example.com.
         private void addSubdomains(string subdomains, string label, string tld, ISet<string> variations)
         {
             if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(tld))
@@ -165,7 +155,7 @@ namespace SSA_Final.Services
             }
         }
 
-        // Generates label mutations that insert up to MaxAddedHyphens additional hyphens.
+        // Inserts additional hyphens into the label, including domains that already contain hyphens.
         private void addHyphen(string subdomains, string label, string tld, ISet<string> variations)
         {
             if (label.Length < 2)
@@ -188,7 +178,6 @@ namespace SSA_Final.Services
                 }
             }
 
-            // Distributes hyphen insertions across label gaps recursively.
             void addHyphenPatterns(int gapIndex, int remaining, int[] distribution)
             {
                 if (created >= MaxHyphenVariantsPerDomain)
@@ -228,7 +217,8 @@ namespace SSA_Final.Services
             }
         }
 
-        // Adds core typosquatting mutations (omission, duplication, transposition, keyboard, homoglyph, and TLD swaps).
+        // Generates typosquatting variants via omission, duplication, adjacent keys, transposition,
+        // homoglyphs, and common TLD swaps.
         private void addTyposquatting(string subdomains, string label, string tld, ISet<string> variations)
         {
             if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(tld))
@@ -317,7 +307,7 @@ namespace SSA_Final.Services
             }
         }
 
-        // Calculates Shannon entropy for a label as a rough randomness indicator.
+        // Shannon entropy helper for identifying highly random labels.
         private static double testShannonEntropy(string value)
         {
             if (string.IsNullOrEmpty(value))
@@ -338,7 +328,6 @@ namespace SSA_Final.Services
             return entropy;
         }
 
-        // Splits a normalized domain into subdomains, root label, and TLD components.
         private static bool SplitDomain(string domain, out string subdomains, out string label, out string tld)
         {
             subdomains = string.Empty;
@@ -362,7 +351,6 @@ namespace SSA_Final.Services
             return !string.IsNullOrWhiteSpace(label) && !string.IsNullOrWhiteSpace(tld);
         }
 
-        // Builds a full domain string from split domain parts.
         private static string BuildDomain(string subdomains, string label, string tld)
         {
             if (!IsValidLabel(label) || string.IsNullOrWhiteSpace(tld))
@@ -375,7 +363,6 @@ namespace SSA_Final.Services
                 : $"{subdomains}.{label}.{tld}";
         }
 
-        // Validates whether a label can be used as a DNS domain label.
         private static bool IsValidLabel(string label)
         {
             if (string.IsNullOrWhiteSpace(label) || label.Length > 63)
@@ -399,7 +386,6 @@ namespace SSA_Final.Services
             return true;
         }
 
-        // Rebuilds a label by inserting distributed hyphen counts between characters.
         private static string BuildHyphenatedLabel(string label, IReadOnlyList<int> distribution)
         {
             if (distribution.Count != label.Length - 1)
@@ -424,7 +410,6 @@ namespace SSA_Final.Services
             return result.ToString();
         }
 
-        // Enumerates all ordered prefix combinations for a requested depth.
         private static IEnumerable<IReadOnlyList<string>> EnumeratePrefixSequences(int depth)
         {
             if (depth <= 0)
@@ -438,7 +423,6 @@ namespace SSA_Final.Services
                 yield return sequence;
             }
 
-            // Recursively builds prefix permutations for the target depth.
             IEnumerable<IReadOnlyList<string>> Enumerate(int index)
             {
                 if (index == depth)
@@ -459,3 +443,4 @@ namespace SSA_Final.Services
         }
     }
 }
+
