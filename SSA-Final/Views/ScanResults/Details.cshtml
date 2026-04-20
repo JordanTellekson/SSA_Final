@@ -9,9 +9,13 @@
 <div class="d-flex align-items-center gap-3 mb-3">
     <a asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; All Scans</a>
     <h1 class="mb-0">@Model.BaseDomain</h1>
-    @if (Model.Status == DomainScanStatus.CompleteWithResults)
+    @if (Model.Status == DomainScanStatus.Failed)
     {
-        <span class="badge bg-danger fs-6">@Model.MaliciousCount suspicious</span>
+        <span class="badge bg-danger fs-6">Failed</span>
+    }
+    else if (Model.NumMaliciousDomains > 0)
+    {
+        <span class="badge bg-danger fs-6">@Model.NumMaliciousDomains suspicious</span>
     }
     else
     {
@@ -20,7 +24,8 @@
 </div>
 
 <p class="text-muted">
-    Scanned at @Model.ScannedAt.ToLocalTime().ToString("f") &nbsp;&middot;&nbsp;
+    Created at @Model.CreatedAt.ToLocalTime().ToString("f") &nbsp;&middot;&nbsp;
+    Finished at @(Model.TimeFinished?.ToLocalTime().ToString("f") ?? "—") &nbsp;&middot;&nbsp;
     @Model.Variants.Count variant(s) analyzed &nbsp;&middot;&nbsp;
     Scan ID: <code>@Model.Id</code>
 </p>
@@ -47,7 +52,7 @@ else
             @foreach (var variant in Model.Variants)
             {
                 <tr class="@(variant.IsSuspicious ? "table-danger" : "")">
-                    <td><code>@variant.Domain</code></td>
+                    <td><code>@variant.DiscoveredDomain</code></td>
                     <td>
                         @if (variant.IsSuspicious)
                         {

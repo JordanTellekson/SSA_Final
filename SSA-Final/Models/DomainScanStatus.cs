@@ -10,10 +10,10 @@ namespace SSA_Final.Models
         [Description("Scan in progress")]
         InProgress,
 
-        [Description("Scan complete")]
-        Complete,
+        [Description("Scan completed")]
+        Completed,
 
-        [Description("Scan complete, malicious domains found")]
-        CompleteWithResults
+        [Description("Scan failed")]
+        Failed
     }
 }

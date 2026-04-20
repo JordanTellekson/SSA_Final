@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SSA_Final.Data;
 
@@ -11,9 +12,11 @@ using SSA_Final.Data;
 namespace SSA_Final.Migrations
 {
     [DbContext(typeof(SSA_FinalContext))]
-    partial class SSA_FinalContextModelSnapshot : ModelSnapshot
+    [Migration("20260420190635_PersistScanLifecycle")]
+    partial class PersistScanLifecycle
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

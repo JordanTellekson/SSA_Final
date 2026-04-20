@@ -28,7 +28,7 @@ namespace SSA_Final.Services.Mocks
 
             return Task.FromResult(new DomainAnalysisResult
             {
-                Domain = domain,
+                DiscoveredDomain = domain,
                 IsSuspicious = false,
                 Summary = "Mock analysis — no seed configured for this domain.",
                 AnalysedAt = DateTime.UtcNow
