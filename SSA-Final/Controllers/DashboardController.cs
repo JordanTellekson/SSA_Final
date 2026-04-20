@@ -7,6 +7,9 @@ using SSA_Final.ViewModels;
 namespace SSA_Final.Controllers
 {
     [Authorize]
+    /// <summary>
+    /// Handles dashboard input and orchestrates end-to-end domain scan execution.
+    /// </summary>
     public class DashboardController : Controller
     {
         private readonly ILogger<DashboardController> _logger;
@@ -14,6 +17,9 @@ namespace SSA_Final.Controllers
         private readonly IDomainAnalyzer _domainAnalyzer;
         private readonly IDomainScanRepository _domainScanRepository;
 
+        /// <summary>
+        /// Creates a controller that coordinates domain generation, analysis, and persistence.
+        /// </summary>
         public DashboardController(
             ILogger<DashboardController> logger,
             IDomainGenerator domainGenerator,
@@ -27,6 +33,10 @@ namespace SSA_Final.Controllers
         }
 
         [HttpGet]
+        /// <summary>
+        /// Shows the scan form and recent scan records.
+        /// </summary>
+        /// <returns>Dashboard page.</returns>
         public IActionResult Index()
         {
             _logger.LogInformation("Dashboard Index accessed at {Time}", DateTime.UtcNow);
@@ -39,6 +49,11 @@ namespace SSA_Final.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        /// <summary>
+        /// Validates input, generates variants, analyzes each variant, and stores the completed scan.
+        /// </summary>
+        /// <param name="model">User-supplied base domain form model.</param>
+        /// <returns>Redirect to scan details on success; redisplays form on validation errors.</returns>
         public async Task<IActionResult> Index(DomainScanViewModel model)
         {
             if (!ModelState.IsValid)

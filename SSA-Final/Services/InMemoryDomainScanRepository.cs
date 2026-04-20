@@ -3,11 +3,20 @@ using SSA_Final.Models;
 
 namespace SSA_Final.Services
 {
+    /// <summary>
+    /// Thread-safe in-memory implementation of <see cref="IDomainScanRepository"/>.
+    /// </summary>
     public class InMemoryDomainScanRepository : IDomainScanRepository
     {
         private readonly List<DomainScan> _scans = new();
         private readonly object _sync = new();
 
+        /// <summary>
+        /// Adds a new scan record to the in-memory store.
+        /// </summary>
+        /// <param name="scan">Scan payload to persist.</param>
+        /// <returns>The stored scan.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="scan"/> is null.</exception>
         public DomainScan Create(DomainScan scan)
         {
             if (scan is null)
@@ -27,6 +36,10 @@ namespace SSA_Final.Services
             }
         }
 
+        /// <summary>
+        /// Returns a snapshot list of all scans.
+        /// </summary>
+        /// <returns>Read-only list of scans.</returns>
         public IReadOnlyList<DomainScan> GetAll()
         {
             lock (_sync)
@@ -35,6 +48,11 @@ namespace SSA_Final.Services
             }
         }
 
+        /// <summary>
+        /// Retrieves one scan by id.
+        /// </summary>
+        /// <param name="id">Scan id.</param>
+        /// <returns>Matching scan or <c>null</c> when not found.</returns>
         public DomainScan? GetById(Guid id)
         {
             lock (_sync)
@@ -43,6 +61,12 @@ namespace SSA_Final.Services
             }
         }
 
+        /// <summary>
+        /// Replaces an existing scan with updated data.
+        /// </summary>
+        /// <param name="scan">Updated scan object.</param>
+        /// <returns><c>true</c> when update succeeds; otherwise <c>false</c>.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="scan"/> is null.</exception>
         public bool Update(DomainScan scan)
         {
             if (scan is null)
@@ -63,6 +87,11 @@ namespace SSA_Final.Services
             }
         }
 
+        /// <summary>
+        /// Removes a scan from the store.
+        /// </summary>
+        /// <param name="id">Scan id to delete.</param>
+        /// <returns><c>true</c> when a record was deleted.</returns>
         public bool Delete(Guid id)
         {
             lock (_sync)

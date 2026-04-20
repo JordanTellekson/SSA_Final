@@ -2,10 +2,20 @@
 
 namespace SSA_Final.Services.Mocks
 {
+    /// <summary>
+    /// Test double for <see cref="IDomainGenerator"/> with call tracking and seedable responses.
+    /// </summary>
     public class MockDomainGenerator : IDomainGenerator
     {
         // Call tracking
+        /// <summary>
+        /// Number of times <see cref="GenerateVariations"/> has been invoked.
+        /// </summary>
         public int CallCount { get; private set; }
+
+        /// <summary>
+        /// Last domain value passed to <see cref="GenerateVariations"/>.
+        /// </summary>
         public string LastCalledDomain { get; private set; } = string.Empty;
 
         // Seeded responses
@@ -18,7 +28,11 @@ namespace SSA_Final.Services.Mocks
         public void SetVariations(string domain, IEnumerable<string> variations)
             => _seededVariations[domain] = variations;
 
-        // IDomainGenerator
+        /// <summary>
+        /// Returns seeded variations when available, otherwise a deterministic placeholder variation.
+        /// </summary>
+        /// <param name="baseDomain">Base domain input.</param>
+        /// <returns>Seeded or fallback variation sequence.</returns>
         public IEnumerable<string> GenerateVariations(string baseDomain)
         {
             CallCount++;

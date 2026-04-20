@@ -1,5 +1,8 @@
 namespace SSA_Final.Models
 {
+    /// <summary>
+    /// Analysis details for a single generated domain variant.
+    /// </summary>
     public class DomainAnalysisResult
     {
         /// <summary>The domain name that was analysed.</summary>

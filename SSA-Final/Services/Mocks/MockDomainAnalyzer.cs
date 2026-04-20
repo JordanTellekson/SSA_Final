@@ -3,9 +3,19 @@ using SSA_Final.Models;
 
 namespace SSA_Final.Services.Mocks
 {
+    /// <summary>
+    /// Test double for <see cref="IDomainAnalyzer"/> with call tracking and seedable responses.
+    /// </summary>
     public class MockDomainAnalyzer : IDomainAnalyzer
     {
+        /// <summary>
+        /// Number of times <see cref="Analyze"/> has been invoked.
+        /// </summary>
         public int CallCount { get; private set; }
+
+        /// <summary>
+        /// Last domain value passed to <see cref="Analyze"/>.
+        /// </summary>
         public string LastCalledDomain { get; private set; } = string.Empty;
 
         // ── Seeded responses ─────────────────────────────────────────────────
@@ -18,6 +28,11 @@ namespace SSA_Final.Services.Mocks
         public void SetResult(string domain, DomainAnalysisResult result)
             => _seededResults[domain] = result;
 
+        /// <summary>
+        /// Returns a seeded analysis result when configured; otherwise returns a safe default result.
+        /// </summary>
+        /// <param name="domain">Domain to analyze.</param>
+        /// <returns>Seeded or fallback analysis result.</returns>
         public Task<DomainAnalysisResult> Analyze(string domain)
         {
             CallCount++;

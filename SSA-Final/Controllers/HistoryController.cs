@@ -6,11 +6,17 @@ using SSA_Final.Models;
 namespace SSA_Final.Controllers
 {
     [Authorize]
+    /// <summary>
+    /// Displays historical scans and seeds demo history when no data exists.
+    /// </summary>
     public class HistoryController : Controller
     {
         private readonly ILogger<HistoryController> _logger;
         private readonly IDomainScanRepository _domainScanRepository;
 
+        /// <summary>
+        /// Creates the history controller.
+        /// </summary>
         public HistoryController(
             ILogger<HistoryController> logger,
             IDomainScanRepository domainScanRepository)
@@ -19,6 +25,10 @@ namespace SSA_Final.Controllers
             _domainScanRepository = domainScanRepository;
         }
 
+        /// <summary>
+        /// Renders the scan-history page.
+        /// </summary>
+        /// <returns>History view with all scans from the repository.</returns>
         public IActionResult Index()
         {
             if (_domainScanRepository.GetAll().Count == 0)
@@ -31,6 +41,9 @@ namespace SSA_Final.Controllers
             return View(_domainScanRepository.GetAll());
         }
 
+        /// <summary>
+        /// Seeds a few sample records so first-run environments have data to display.
+        /// </summary>
         private void SeedHistory()
         {
             _domainScanRepository.Create(new DomainScan

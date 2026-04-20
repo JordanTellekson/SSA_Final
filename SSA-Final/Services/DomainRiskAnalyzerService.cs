@@ -3,6 +3,9 @@ using SSA_Final.Models;
 
 namespace SSA_Final.Services
 {
+    /// <summary>
+    /// Calculates phishing risk signals for domains using allow-list and heuristic scoring.
+    /// </summary>
     public class DomainRiskAnalyzerService : IDomainRiskAnalyzer
     {
         private readonly ILogger<DomainRiskAnalyzerService> _logger;
@@ -10,6 +13,9 @@ namespace SSA_Final.Services
         private readonly Lazy<HashSet<string>> _activeDomains;
         private readonly Lazy<List<string>> _activeRootDomains;
 
+        /// <summary>
+        /// Creates a risk analyzer service and prepares lazy domain data caches.
+        /// </summary>
         public DomainRiskAnalyzerService(
             ILogger<DomainRiskAnalyzerService> logger,
             IWebHostEnvironment hostEnvironment)
@@ -26,6 +32,11 @@ namespace SSA_Final.Services
                     .ToList());
         }
 
+        /// <summary>
+        /// Determines whether a domain appears in the known active-domain list.
+        /// </summary>
+        /// <param name="domainInput">Raw user input domain.</param>
+        /// <returns><c>true</c> when the domain is allow-listed.</returns>
         public bool IsKnownActiveDomain(string? domainInput)
         {
             var normalizedInput = NormalizeDomain(domainInput);
@@ -37,6 +48,11 @@ namespace SSA_Final.Services
             return _activeDomains.Value.Contains(normalizedInput);
         }
 
+        /// <summary>
+        /// Calculates all configured risk signals and returns an aggregated result.
+        /// </summary>
+        /// <param name="domainInput">Raw user input domain.</param>
+        /// <returns>Risk analysis result object.</returns>
         public DomainRiskAnalysisResult AnalyzeDomainRisk(string? domainInput)
         {
             var normalizedInput = NormalizeDomain(domainInput);
@@ -68,6 +84,10 @@ namespace SSA_Final.Services
                 entropy);
         }
 
+        /// <summary>
+        /// Loads normalized allow-list domains from <c>Active_Domains.txt</c>.
+        /// </summary>
+        /// <returns>Case-insensitive set of known active domains.</returns>
         private HashSet<string> LoadDomains()
         {
             if (!File.Exists(_domainsFilePath))
@@ -91,6 +111,11 @@ namespace SSA_Final.Services
             return domains;
         }
 
+        /// <summary>
+        /// Scores likely typosquatting using root-label edit distance.
+        /// </summary>
+        /// <param name="normalizedInput">Normalized domain string.</param>
+        /// <returns>Typosquatting signal score.</returns>
         private DomainRiskSignalScore CalculateTyposquattingScore(string normalizedInput)
         {
             var inputRoot = GetRootDomainLabel(normalizedInput);
@@ -138,6 +163,11 @@ namespace SSA_Final.Services
             return new DomainRiskSignalScore("Typosquatting/Edit Distance", score, triggered, detail);
         }
 
+        /// <summary>
+        /// Scores suspicious depth by counting subdomain labels.
+        /// </summary>
+        /// <param name="normalizedInput">Normalized domain string.</param>
+        /// <returns>Subdomain signal score.</returns>
         private static DomainRiskSignalScore CalculateSubdomainScore(string normalizedInput)
         {
             var labels = normalizedInput.Split('.', StringSplitOptions.RemoveEmptyEntries);
@@ -158,6 +188,11 @@ namespace SSA_Final.Services
                 $"Detected {subdomainCount} subdomain label(s).");
         }
 
+        /// <summary>
+        /// Scores risk based on hyphen frequency and repeated hyphen patterns.
+        /// </summary>
+        /// <param name="normalizedInput">Normalized domain string.</param>
+        /// <returns>Hyphen signal score.</returns>
         private static DomainRiskSignalScore CalculateHyphenScore(string normalizedInput)
         {
             var hyphenCount = normalizedInput.Count(c => c == '-');
@@ -182,6 +217,11 @@ namespace SSA_Final.Services
                 $"Detected {hyphenCount} hyphen(s) in the domain.");
         }
 
+        /// <summary>
+        /// Scores entropy-driven randomness across alphanumeric domain characters.
+        /// </summary>
+        /// <param name="normalizedInput">Normalized domain string.</param>
+        /// <returns>Entropy signal score.</returns>
         private static DomainRiskSignalScore CalculateEntropyScore(string normalizedInput)
         {
             var sample = new string(normalizedInput.Where(char.IsLetterOrDigit).ToArray());
@@ -209,6 +249,11 @@ namespace SSA_Final.Services
                 $"Calculated entropy is {entropy:F2}.");
         }
 
+        /// <summary>
+        /// Extracts the effective root label from a normalized domain.
+        /// </summary>
+        /// <param name="normalizedDomain">Normalized domain.</param>
+        /// <returns>Root label used for similarity comparison.</returns>
         private static string GetRootDomainLabel(string normalizedDomain)
         {
             var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
@@ -225,6 +270,13 @@ namespace SSA_Final.Services
             return labels[^2].ToLowerInvariant();
         }
 
+        /// <summary>
+        /// Computes bounded Levenshtein edit distance with early exit for performance.
+        /// </summary>
+        /// <param name="a">First string.</param>
+        /// <param name="b">Second string.</param>
+        /// <param name="maxDistance">Maximum distance of interest.</param>
+        /// <returns>Edit distance or <c>maxDistance + 1</c> when above bound.</returns>
         private static int CalculateLevenshteinDistance(string a, string b, int maxDistance)
         {
             if (Math.Abs(a.Length - b.Length) > maxDistance)
@@ -265,6 +317,11 @@ namespace SSA_Final.Services
             return previous[b.Length];
         }
 
+        /// <summary>
+        /// Calculates Shannon entropy for a character sequence.
+        /// </summary>
+        /// <param name="input">Input sequence.</param>
+        /// <returns>Entropy value in bits.</returns>
         private static double CalculateShannonEntropy(string input)
         {
             if (string.IsNullOrEmpty(input))
@@ -290,6 +347,11 @@ namespace SSA_Final.Services
             return entropy;
         }
 
+        /// <summary>
+        /// Normalizes raw domain/user URL text to a lowercase host string.
+        /// </summary>
+        /// <param name="rawDomain">Raw domain or URL from the caller.</param>
+        /// <returns>Normalized host string or <c>null</c> when invalid.</returns>
         private static string? NormalizeDomain(string? rawDomain)
         {
             if (string.IsNullOrWhiteSpace(rawDomain))

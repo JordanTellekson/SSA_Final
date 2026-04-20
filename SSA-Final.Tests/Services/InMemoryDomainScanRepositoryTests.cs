@@ -4,9 +4,15 @@ using Xunit;
 
 namespace SSA_Final.Tests.Services
 {
+    /// <summary>
+    /// Verifies CRUD behavior for the in-memory scan repository implementation.
+    /// </summary>
     public class InMemoryDomainScanRepositoryTests
     {
         [Fact]
+        /// <summary>
+        /// Ensures create, read, update, and delete operations behave end-to-end.
+        /// </summary>
         public void Crud_Should_Create_Read_Update_And_Delete_DomainScan()
         {
             var repository = new InMemoryDomainScanRepository();

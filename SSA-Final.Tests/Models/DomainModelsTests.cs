@@ -3,9 +3,15 @@ using Xunit;
 
 namespace SSA_Final.Tests.Models
 {
+    /// <summary>
+    /// Verifies domain model classes preserve expected field behavior.
+    /// </summary>
     public class DomainModelsTests
     {
         [Fact]
+        /// <summary>
+        /// Confirms all domain analysis fields can be assigned and read back.
+        /// </summary>
         public void DomainAnalysisResult_Should_Assign_All_UserStory_Fields()
         {
             var result = new DomainAnalysisResult
@@ -25,6 +31,9 @@ namespace SSA_Final.Tests.Models
         }
 
         [Fact]
+        /// <summary>
+        /// Confirms scan aggregate fields and malicious-count projection work as expected.
+        /// </summary>
         public void DomainScan_Should_Store_BaseDomain_ScanDate_And_ResultsCollection()
         {
             var scan = new DomainScan
@@ -51,6 +60,9 @@ namespace SSA_Final.Tests.Models
         }
 
         [Fact]
+        /// <summary>
+        /// Confirms risk-analysis model stores decision and explanatory fields correctly.
+        /// </summary>
         public void DomainRiskAnalysis_Should_Assign_DomainName_Suspicious_Reason_And_Notes()
         {
             var risk = new DomainRiskAnalysis

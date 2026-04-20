@@ -3,15 +3,26 @@ using SSA_Final.Models;
 
 namespace SSA_Final.Services
 {
+    /// <summary>
+    /// Performs per-domain variant analysis and returns structured findings.
+    /// </summary>
     public class DomainAnalyzerService : IDomainAnalyzer
     {
         private readonly ILogger<DomainAnalyzerService> _logger;
 
+        /// <summary>
+        /// Creates the analyzer service.
+        /// </summary>
         public DomainAnalyzerService(ILogger<DomainAnalyzerService> logger)
         {
             _logger = logger;
         }
 
+        /// <summary>
+        /// Analyzes a single domain candidate and returns suspiciousness details.
+        /// </summary>
+        /// <param name="domain">Domain candidate to analyze.</param>
+        /// <returns>Analysis result for the provided domain.</returns>
         public async Task<DomainAnalysisResult> Analyze(string domain)
         {
             _logger.LogInformation(

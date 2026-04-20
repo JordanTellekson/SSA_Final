@@ -4,6 +4,7 @@ using SSA_Final.Data;
 using SSA_Final.Interfaces;
 using SSA_Final.Services;
 
+// Application bootstrap: configures services, middleware, routes, and startup logging.
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging
