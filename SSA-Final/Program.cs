@@ -30,9 +30,13 @@ builder.Services.AddDbContext<SSA_FinalContext>(options =>
 
 logger.LogInformation("Database context configured with connection string.");
 
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient();
+
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IDomainRiskAnalyzer, DomainRiskAnalyzerService>();
+builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
 builder.Services.AddSingleton<IScanStore, ScanStoreService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
 

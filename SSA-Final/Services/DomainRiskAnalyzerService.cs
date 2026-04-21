@@ -9,12 +9,15 @@ namespace SSA_Final.Services
         private readonly string _domainsFilePath;
         private readonly Lazy<HashSet<string>> _activeDomains;
         private readonly Lazy<List<string>> _activeRootDomains;
+        private readonly IPhishingBlocklistService _blocklistService;
 
         public DomainRiskAnalyzerService(
             ILogger<DomainRiskAnalyzerService> logger,
-            IWebHostEnvironment hostEnvironment)
+            IWebHostEnvironment hostEnvironment,
+            IPhishingBlocklistService blocklistService)
         {
             _logger = logger;
+            _blocklistService = blocklistService;
             _domainsFilePath = Path.Combine(hostEnvironment.ContentRootPath, "Active_Domains.txt");
 
             _activeDomains = new Lazy<HashSet<string>>(LoadDomains);
@@ -37,7 +40,7 @@ namespace SSA_Final.Services
             return _activeDomains.Value.Contains(normalizedInput);
         }
 
-        public DomainRiskAnalysisResult AnalyzeDomainRisk(string? domainInput)
+        public async Task<DomainRiskAnalysisResult> AnalyzeDomainRiskAsync(string? domainInput)
         {
             var normalizedInput = NormalizeDomain(domainInput);
             if (string.IsNullOrWhiteSpace(normalizedInput))
@@ -50,12 +53,44 @@ namespace SSA_Final.Services
                 return DomainRiskAnalysisResult.ForKnownActiveDomain(normalizedInput);
             }
 
+            // Checks for active blocklist
+            var blocklistResult = await _blocklistService.CheckAsync(normalizedInput);
+
+            if (blocklistResult.IsMatch)
+            {
+                _logger.LogWarning("Domain {Domain} matched phishing blocklist ({Source})", normalizedInput, blocklistResult.Source);
+
+                var signal = new DomainRiskSignalScore(
+                    "Blocklist Match",
+                    100,
+                    true,
+                    $"Domain found in {blocklistResult.Source} feed.");
+
+                return new DomainRiskAnalysisResult(
+                    normalizedInput,
+                    isKnownActiveDomain: false,
+                    isValidDomain: true,
+                    overallRiskScore: 100, // override
+                    typosquattingEditDistance: signal,
+                    excessiveSubdomains: signal,
+                    hyphenAbuse: signal,
+                    shannonEntropy: signal,
+                    isBlocklistMatch: true,
+                    blocklistSource: blocklistResult.Source,
+                    usedBlocklistFallback: blocklistResult.IsStale);
+            }
+
             var typosquatting = CalculateTyposquattingScore(normalizedInput);
             var subdomains = CalculateSubdomainScore(normalizedInput);
             var hyphen = CalculateHyphenScore(normalizedInput);
             var entropy = CalculateEntropyScore(normalizedInput);
 
             var overallRisk = typosquatting.Score + subdomains.Score + hyphen.Score + entropy.Score;
+
+            if (blocklistResult.IsStale)
+            {
+                _logger.LogWarning("Blocklist unavailable. Structural-only analysis used for {Domain}.", normalizedInput);
+            }
 
             return new DomainRiskAnalysisResult(
                 normalizedInput,
@@ -65,7 +100,10 @@ namespace SSA_Final.Services
                 typosquatting,
                 subdomains,
                 hyphen,
-                entropy);
+                entropy,
+                isBlocklistMatch: false,
+                blocklistSource: null,
+                usedBlocklistFallback: blocklistResult.IsStale);
         }
 
         private HashSet<string> LoadDomains()
