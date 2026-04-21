@@ -104,7 +104,7 @@ namespace SSA_Final.Services
 
             return new DomainAnalysisResult
             {
-                Domain = domain,
+                DiscoveredDomain = domain,
                 IsSuspicious = isSuspicious,
                 Summary = summary,
                 Indicators = indicators,
