@@ -19,6 +19,7 @@ else
             <tr>
                 <th>Base Domain</th>
                 <th>Scanned At</th>
+                <th>Finished</th>
                 <th>Variants</th>
                 <th>Suspicious</th>
                 <th>Status</th>
@@ -30,12 +31,13 @@ else
             {
                 <tr>
                     <td><strong>@scan.BaseDomain</strong></td>
-                    <td>@scan.ScannedAt.ToLocalTime().ToString("g")</td>
+                    <td>@scan.CreatedAt.ToLocalTime().ToString("g")</td>
+                    <td>@(scan.TimeFinished?.ToLocalTime().ToString("g") ?? "—")</td>
                     <td>@scan.Variants.Count</td>
                     <td>
-                        @if (scan.MaliciousCount > 0)
+                        @if (scan.NumMaliciousDomains > 0)
                         {
-                            <span class="badge bg-danger">@scan.MaliciousCount</span>
+                            <span class="badge bg-danger">@scan.NumMaliciousDomains</span>
                         }
                         else
                         {

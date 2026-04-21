@@ -77,7 +77,7 @@ namespace SSA_Final.Services
 
                 return new DomainAnalysisResult
                 {
-                    Domain = domain ?? string.Empty,
+                    DiscoveredDomain = domain ?? string.Empty,
                     IsSuspicious = false,
                     Summary = "No domain supplied — analysis skipped.",
                     AnalysedAt = DateTime.UtcNow

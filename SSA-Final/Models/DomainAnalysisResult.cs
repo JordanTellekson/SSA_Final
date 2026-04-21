@@ -2,8 +2,12 @@
 {
     public class DomainAnalysisResult
     {
-        /// <summary>The domain that was analysed.</summary>
-        public string Domain { get; set; } = string.Empty;
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        public Guid DomainScanId { get; set; }
+
+        /// <summary>The discovered domain that was analysed.</summary>
+        public string DiscoveredDomain { get; set; } = string.Empty;
 
         /// <summary>
         /// Indicates whether the domain was flagged as potentially malicious.
