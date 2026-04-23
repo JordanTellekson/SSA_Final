@@ -1,4 +1,4 @@
-﻿@using SSA_Final.ViewModels
+@using SSA_Final.ViewModels
 @model DomainScanViewModel
 
 @{
@@ -8,6 +8,11 @@
 
 <h1>Dashboard</h1>
 <p class="text-muted">Enter a base domain to scan for typosquatting variants.</p>
+
+@if (TempData["ScanError"] is string scanError)
+{
+    <div class="alert alert-danger" role="alert">@scanError</div>
+}
 
 @using (Html.BeginForm("Index", "Dashboard", FormMethod.Post))
 {

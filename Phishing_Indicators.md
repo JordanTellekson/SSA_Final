@@ -13,6 +13,13 @@
     -   `secure-login-account-update.com`
 -   **IP address instead of domain**
     -   `http://192.168.1.1/login`
+-   **External phishing blocklist match (high-confidence indicator)**
+    -   Domains are cross-referenced against known phishing intelligence feeds during analysis
+    -   Primary feed: OpenPhish (https://openphish.com/feed.txt)
+    -   If a domain is found in the blocklist, it is immediately flagged as malicious
+    -   This overrides all structural risk signals (typosquatting, entropy, etc.)
+    -   Risk score is set to maximum (100)
+    -   Example behavior: `malicious-login-paypal.com` → instant high-confidence detection
 ### Advanced Patterns Beyond the Basics
 -   **Character distribution anomalies**
     -   High ratio of digits/symbols vs letters
@@ -86,5 +93,25 @@ These require crawling or sandboxing the page.
     -   `?session=...&auth=...&token=...` 
 -   **Mixed language patterns**
     -   English + random strings
+
+### External Blocklist Source (OpenPhish)
+
+-   **Provider**
+    -   OpenPhish
+    -   https://openphish.com/feed.txt
+-   **Data Type**
+    -   Verified phishing URLs
+    -   Normalized to domain-level indicators during analysis
+-   **Update Frequency**
+    -   The feed is refreshed every 60 minutes
+    -   Updates are retrieved via automated background fetch
+    -   A locally cached version is used for all analysis requests within the TTL window
+    -   Cache expiration triggers a refresh to ensure updated threat intelligence while avoiding rate-limiting
+-   **False Positive Rate**
+    -   OpenPhish is a curated and actively maintained intelligence feed with a low false-positive rate
+    -   False positives may occur in rare cases such as:
+        -   Temporarily compromised legitimate domains
+        -   Recently cleaned domains still present in cached or historical feed data
+    -   Blocklist matches are treated as high-confidence indicators and override all heuristic-based risk scoring
 
 > Written with [StackEdit](https://stackedit.io/).
