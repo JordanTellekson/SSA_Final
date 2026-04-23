@@ -34,5 +34,10 @@ namespace SSA_Final.Services
         {
             lock (_lock) { return _scans.FirstOrDefault(s => s.Id == id); }
         }
+
+        public List<DomainScan> GetPendingScans()
+        {
+            lock (_lock) { return _scans.Where(s => s.Status == DomainScanStatus.Pending).ToList(); }
+        }
     }
 }

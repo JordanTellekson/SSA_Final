@@ -1,15 +1,21 @@
-﻿@using SSA_Final.Models
+@using SSA_Final.Models
 @model DomainScan
 
 @{
     ViewData["Title"] = $"Scan Results — {Model.BaseDomain}";
     Layout = "~/Views/Shared/_Layout.cshtml";
+
+    bool isActive = Model.Status == DomainScanStatus.Pending || Model.Status == DomainScanStatus.InProgress;
 }
 
 <div class="d-flex align-items-center gap-3 mb-3">
-    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; All Scans</a>
+    <a asp-controller="ScanResults" asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; All Scans</a>
     <h1 class="mb-0">@Model.BaseDomain</h1>
-    @if (Model.Status == DomainScanStatus.Failed)
+    @if (isActive)
+    {
+        <span class="badge bg-primary fs-6">@Model.Status</span>
+    }
+    else if (Model.Status == DomainScanStatus.Failed)
     {
         <span class="badge bg-danger fs-6">Failed</span>
     }
@@ -32,7 +38,22 @@
 
 <hr />
 
-@if (!Model.Variants.Any())
+@if (isActive)
+{
+    <div id="scan-loading" class="my-4">
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+            <span id="loading-status-text" class="text-muted">
+                @(Model.Status == DomainScanStatus.Pending ? "Scan queued — waiting for a worker to pick it up..." : "Scan in progress — analysing variants...")
+            </span>
+        </div>
+        <div class="progress" style="height: 8px;" role="progressbar" aria-label="Scan progress" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar progress-bar-striped progress-bar-animated w-100"></div>
+        </div>
+        <p class="text-muted mt-2" style="font-size: 0.85rem;">This page will update automatically when the scan completes.</p>
+    </div>
+}
+else if (!Model.Variants.Any())
 {
     <p>No variants were generated for this domain.</p>
 }
@@ -84,4 +105,48 @@ else
             }
         </tbody>
     </table>
+}
+
+@section Scripts {
+    @if (isActive)
+    {
+        <script>
+            (function () {
+                const statusUrl = '@Url.Action("GetScanStatus", "ScanResults", new { id = Model.Id })';
+                const statusText = document.getElementById('loading-status-text');
+
+                const STATUS_MESSAGES = {
+                    'Pending':    'Scan queued — waiting for a worker to pick it up...',
+                    'InProgress': 'Scan in progress — analysing variants...'
+                };
+
+                async function poll() {
+                    try {
+                        const response = await fetch(statusUrl, { credentials: 'same-origin' });
+                        if (!response.ok) return;
+
+                        const data = await response.json();
+
+                        if (data.status === 'Completed' || data.status === 'Failed') {
+                            // Reload the full page now that the scan has reached a terminal state.
+                            window.location.reload();
+                            return;
+                        }
+
+                        // Update the status message text while still active.
+                        if (statusText && STATUS_MESSAGES[data.status]) {
+                            statusText.textContent = STATUS_MESSAGES[data.status];
+                        }
+                    } catch {
+                        // Network hiccup — silently wait for the next interval.
+                    }
+
+                    setTimeout(poll, 2000);
+                }
+
+                // Kick off the first poll after a short delay so the initial page render settles.
+                setTimeout(poll, 2000);
+            })();
+        </script>
+    }
 }

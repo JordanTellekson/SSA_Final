@@ -8,5 +8,6 @@ namespace SSA_Final.Interfaces
         void Update(DomainScan scan);
         List<DomainScan> GetAll();
         DomainScan? GetById(Guid id);
+        List<DomainScan> GetPendingScans();
     }
 }

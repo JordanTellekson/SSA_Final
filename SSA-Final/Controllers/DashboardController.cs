@@ -1,8 +1,9 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
 using SSA_Final.Models;
 using SSA_Final.ViewModels;
+using System.Threading.Channels;
 
 namespace SSA_Final.Controllers
 {
@@ -10,92 +11,54 @@ namespace SSA_Final.Controllers
     public class DashboardController : Controller
     {
         private readonly ILogger<DashboardController> _logger;
-        private readonly IDomainGenerator _domainGenerator;
-        private readonly IDomainAnalyzer _domainAnalyzer;
         private readonly IScanStore _scanStore;
+        private readonly ChannelWriter<Guid> _channelWriter;
 
         public DashboardController(
             ILogger<DashboardController> logger,
-            IDomainGenerator domainGenerator,
-            IDomainAnalyzer domainAnalyzer,
-            IScanStore scanStore)
+            IScanStore scanStore,
+            ChannelWriter<Guid> channelWriter)
         {
             _logger = logger;
-            _domainGenerator = domainGenerator;
-            _domainAnalyzer = domainAnalyzer;
             _scanStore = scanStore;
+            _channelWriter = channelWriter;
         }
 
         [HttpGet]
         public IActionResult Index()
         {
-            var model = new DomainScanViewModel
-            {
-                ScanHistory = _scanStore.GetAll()
-            };
-
-            return View(model);
+            return View(new DomainScanViewModel());
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Index(DomainScanViewModel model)
+        public IActionResult Index(DomainScanViewModel model)
         {
             if (!ModelState.IsValid)
             {
-                model.ScanHistory = _scanStore.GetAll();
                 return View(model);
             }
 
             var baseDomain = model.Domain.Trim().ToLower();
-            _logger.LogInformation("Initiating scan for domain: {Domain}", baseDomain);
 
             var scan = new DomainScan
             {
                 BaseDomain = baseDomain,
                 CreatedAt = DateTime.UtcNow,
-                Status = DomainScanStatus.InProgress,
+                Status = DomainScanStatus.Pending,
                 NumMaliciousDomains = 0
             };
 
             _scanStore.Add(scan);
 
-            try
-            {
-                var variants = _domainGenerator.GenerateVariations(baseDomain).ToList();
+            // Hand off to the background worker — do not block the HTTP thread.
+            _channelWriter.TryWrite(scan.Id);
 
-                var analysisResults = new List<DomainAnalysisResult>();
-                foreach (var variant in variants)
-                {
-                    var result = await _domainAnalyzer.Analyze(variant);
-                    result.DomainScanId = scan.Id;
-                    analysisResults.Add(result);
-                }
+            _logger.LogInformation(
+                "Scan {DomainScanId}: queued for background processing (domain: '{Domain}').",
+                scan.Id, baseDomain);
 
-                scan.Variants = analysisResults;
-                scan.NumMaliciousDomains = analysisResults.Count(r => r.IsSuspicious);
-                scan.TimeFinished = DateTime.UtcNow;
-                scan.Status = DomainScanStatus.Completed;
-
-                _scanStore.Update(scan);
-
-                _logger.LogInformation(
-                    "Scan {Id} complete for {Domain}: {Count} variant(s), {Malicious} suspicious.",
-                    scan.Id, baseDomain, analysisResults.Count, scan.NumMaliciousDomains);
-
-                return RedirectToAction("Details", "ScanResults", new { id = scan.Id });
-            }
-            catch (Exception ex)
-            {
-                scan.TimeFinished = DateTime.UtcNow;
-                scan.Status = DomainScanStatus.Failed;
-                _scanStore.Update(scan);
-
-                _logger.LogError(ex, "Scan {Id} failed for {Domain}", scan.Id, baseDomain);
-                TempData["ScanError"] = "Scan failed. Please try again.";
-
-                return RedirectToAction("Details", "ScanResults", new { id = scan.Id });
-            }
+            return RedirectToAction("Details", "ScanResults", new { id = scan.Id });
         }
     }
 }

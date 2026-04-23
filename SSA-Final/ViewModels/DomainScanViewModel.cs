@@ -1,7 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-using SSA_Final.Models;
-
 namespace SSA_Final.ViewModels
 {
     public class DomainScanViewModel
@@ -12,7 +10,5 @@ namespace SSA_Final.ViewModels
             ErrorMessage = "Enter a valid domain (e.g. example.com)"
         )]
         public string Domain { get; set; } = string.Empty;
-
-        public List<DomainScan> ScanHistory { get; set; } = new();
     }
 }

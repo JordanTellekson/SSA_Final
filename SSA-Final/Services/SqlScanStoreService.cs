@@ -48,5 +48,11 @@ namespace SSA_Final.Services
                 .FirstOrDefault(x => x.Id == id);
         }
 
+        public List<DomainScan> GetPendingScans()
+        {
+            return _dbContext.DomainScans
+                .Where(x => x.Status == DomainScanStatus.Pending)
+                .ToList();
+        }
     }
 }
