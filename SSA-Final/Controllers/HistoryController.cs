@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using SSA_Final.Models;
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
 
@@ -16,10 +17,10 @@ namespace SSA_Final.Controllers
             _scanStore = scanStore;
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index([FromQuery] ScanQuery query)
         {
             _logger.LogInformation("History page loaded at {Time}", DateTime.UtcNow);
-            var scans = _scanStore.GetAll();
+            var scans = await _scanStore.GetAsync(query);
             return View(scans);
         }
     }

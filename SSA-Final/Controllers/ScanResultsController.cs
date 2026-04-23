@@ -16,13 +16,13 @@ namespace SSA_Final.Controllers
             _scanStore = scanStore;
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
             var scans = _scanStore.GetAll();
             return View(scans);
         }
 
-        public IActionResult Details(Guid id)
+        public async Task<IActionResult> Details(Guid id)
         {
             var scan = _scanStore.GetById(id);
             if (scan is null)
