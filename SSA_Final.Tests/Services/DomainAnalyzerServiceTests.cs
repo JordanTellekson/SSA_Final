@@ -1,4 +1,7 @@
-﻿using Microsoft.Extensions.Configuration;
+// Unit tests for DomainAnalyzerService covering static checks, network behavior,
+// SSL indicators, HTML analysis, timeout/error handling, and output contracts.
+
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using SSA_Final.Interfaces;
 using SSA_Final.Services;
@@ -515,3 +518,4 @@ public class DomainAnalyzerServiceTests
         Assert.NotNull(result);
     }
 }
+

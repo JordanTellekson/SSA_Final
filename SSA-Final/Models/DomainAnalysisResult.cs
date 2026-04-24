@@ -1,4 +1,6 @@
-﻿namespace SSA_Final.Models
+// Entity/model representing the analysis outcome for a generated domain variant.
+
+namespace SSA_Final.Models
 {
     public class DomainAnalysisResult
     {
@@ -30,3 +32,4 @@
         public IList<string> Indicators { get; set; } = new List<string>();
     }
 }
+

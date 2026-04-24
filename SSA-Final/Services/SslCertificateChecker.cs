@@ -1,4 +1,7 @@
-﻿using SSA_Final.Interfaces;
+// SSL inspection service that performs direct TLS handshakes and validates
+// certificate characteristics used as phishing indicators.
+
+using SSA_Final.Interfaces;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -124,3 +127,4 @@ namespace SSA_Final.Services
         }
     }
 }
+

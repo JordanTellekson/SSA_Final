@@ -1,4 +1,7 @@
-﻿using SSA_Final.Interfaces;
+// In-memory scan store used for process-local scan lifecycle persistence.
+// Provides thread-safe add/update/query operations for dashboard and history pages.
+
+using SSA_Final.Interfaces;
 using SSA_Final.Models;
 
 namespace SSA_Final.Services
@@ -36,3 +39,4 @@ namespace SSA_Final.Services
         }
     }
 }
+

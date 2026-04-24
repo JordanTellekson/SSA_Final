@@ -1,4 +1,7 @@
-﻿using SSA_Final.Interfaces;
+// Variation generator service that creates basic domain permutations for scanning.
+// This implementation is intentionally simple and can be replaced with richer logic.
+
+using SSA_Final.Interfaces;
 
 namespace SSA_Final.Services
 {
@@ -59,3 +62,4 @@ namespace SSA_Final.Services
         }
     }
 }
+

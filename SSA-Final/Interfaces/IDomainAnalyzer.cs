@@ -1,4 +1,6 @@
-﻿using SSA_Final.Models;
+// Contract for asynchronous phishing/suspicion analysis of a single domain.
+
+using SSA_Final.Models;
 
 namespace SSA_Final.Interfaces
 {
@@ -7,3 +9,4 @@ namespace SSA_Final.Interfaces
         Task<DomainAnalysisResult> Analyze(string domain);
     }
 }
+

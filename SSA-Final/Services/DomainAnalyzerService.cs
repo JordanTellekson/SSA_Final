@@ -1,4 +1,7 @@
-﻿using SSA_Final.Interfaces;
+// Core analyzer implementation that combines static heuristics and network checks.
+// Produces domain-level suspicion indicators and an explainable summary.
+
+using SSA_Final.Interfaces;
 using SSA_Final.Models;
 using System.Net;
 using System.Net.Sockets;
@@ -335,3 +338,4 @@ namespace SSA_Final.Services
         }
     }
 }
+

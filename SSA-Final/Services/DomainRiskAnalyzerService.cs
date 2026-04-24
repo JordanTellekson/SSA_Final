@@ -1,3 +1,6 @@
+// Risk scoring service that evaluates domain structure and blocklist matches.
+// Blends deterministic signals into a composite risk score payload.
+
 using SSA_Final.Interfaces;
 using SSA_Final.Models;
 
@@ -356,3 +359,5 @@ namespace SSA_Final.Services
         }
     }
 }
+
+

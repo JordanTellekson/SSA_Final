@@ -1,4 +1,7 @@
-﻿using SSA_Final.Interfaces;
+// Entity Framework-backed scan store implementation.
+// Persists scans and variant analysis records to the configured SQL database.
+
+using SSA_Final.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using SSA_Final.Data;
 using SSA_Final.Models;
@@ -50,3 +53,5 @@ namespace SSA_Final.Services
 
     }
 }
+
+
