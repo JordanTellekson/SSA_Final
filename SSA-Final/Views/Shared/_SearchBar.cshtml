@@ -1,0 +1,20 @@
+﻿@model string?
+
+<form method="get"
+      asp-controller="@ViewContext.RouteData.Values["controller"]"
+      asp-action="@ViewContext.RouteData.Values["action"]">
+
+    <input type="hidden" name="page" value="1" />
+
+    @if (ViewContext.RouteData.Values["id"] != null)
+    {
+        <input type="hidden" name="id" value="@ViewContext.RouteData.Values["id"]" />
+    }
+
+    <input type="text"
+           name="query"
+           value="@Model"
+           placeholder="Search domains or variants..." />
+
+    <button type="submit">Search</button>
+</form>

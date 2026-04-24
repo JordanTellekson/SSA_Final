@@ -1,5 +1,7 @@
 ﻿@using SSA_Final.Models
-@model List<DomainScan>
+@using SSA_Final.ViewModels
+@using SSA_Final.Interfaces
+@model PagedResultViewModel<DomainScan>
 
 @{
     ViewData["Title"] = "History";
@@ -8,61 +10,22 @@
 
 <h1>Scan History</h1>
 
-@if (!Model.Any())
+@if (!Model.Result.Items.Any())
 {
     <p class="text-muted">No scans yet. <a asp-controller="Dashboard" asp-action="Index">Start a scan.</a></p>
 }
 else
 {
-    <ul class="list-group">
-        @foreach (var scan in Model)
-        {
-            string orbClass;
-            string tooltip;
-            switch (scan.Status)
-            {
-                case DomainScanStatus.Complete:
-                    orbClass = "orb-success";
-                    tooltip = "Scan complete — no threats found";
-                    break;
-                case DomainScanStatus.CompleteWithResults:
-                    orbClass = "orb-warning";
-                    tooltip = $"Scan complete — {scan.MaliciousCount} suspicious domain(s)";
-                    break;
-                default:
-                    orbClass = "orb-pending";
-                    tooltip = "Scan in progress";
-                    break;
-            }
+    
+    @await Html.PartialAsync("_SearchBar", Model.Query)
+    @await Html.PartialAsync("_ScanList", new ScanListViewModel
+    {
+        Scans = Model.Result.Items,
+        Mode = "history",
+        Query = Model.Query
+    })
 
-            <li class="list-group-item d-flex align-items-center gap-3">
-                <div class="orb @orbClass flex-shrink-0"
-                     data-bs-toggle="tooltip"
-                     data-bs-title="@tooltip"></div>
-
-                <div class="flex-grow-1">
-                    <strong>@scan.BaseDomain</strong>
-                    <small class="text-muted ms-2">@scan.ScannedAt.ToLocalTime().ToString("g")</small>
-                </div>
-
-                <div class="d-flex gap-3 align-items-center">
-                    @if (scan.MaliciousCount > 0)
-                    {
-                        <span class="badge bg-danger">@scan.MaliciousCount suspicious</span>
-                    }
-                    else if (scan.Status == DomainScanStatus.Complete)
-                    {
-                        <span class="badge bg-success">Clean</span>
-                    }
-                    <span class="text-muted small">@scan.Variants.Count variant(s)</span>
-                    <a asp-controller="ScanResults" asp-action="Details" asp-route-id="@scan.Id"
-                           class="btn btn-sm btn-outline-primary">
-                        View Scan
-                    </a>
-                </div>
-            </li>
-        }
-    </ul>
+    @await Html.PartialAsync("_Pagination", Model.Result)
 }
 
 @section Scripts {

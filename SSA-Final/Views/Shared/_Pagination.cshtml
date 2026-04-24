@@ -1,0 +1,38 @@
+﻿@model SSA_Final.Interfaces.IPagedResult<DomainScan>
+
+@{
+    var query = ViewData["Query"]?.ToString();
+}
+
+@if (Model.TotalPages > 1)
+{
+    <nav>
+        <ul class="pagination">
+
+            <li class="page-item @(Model.Page == 1 ? "disabled" : "")">
+                <a class="page-link"
+                       href="@Url.Action(null, new { page = Model.Page - 1, query })">
+                    Previous
+                </a>
+            </li>
+
+            @for (int i = 1; i <= Model.TotalPages; i++)
+            {
+                <li class="page-item @(i == Model.Page ? "active" : "")">
+                    <a class="page-link"
+                           href="@Url.Action(null, new { page = i, query })">
+                        @i
+                    </a>
+                </li>
+            }
+
+            <li class="page-item @(Model.Page == Model.TotalPages ? "disabled" : "")">
+                <a class="page-link"
+                       href="@Url.Action(null, new { page = Model.Page + 1, query })">
+                    Next
+                </a>
+            </li>
+
+        </ul>
+    </nav>
+}

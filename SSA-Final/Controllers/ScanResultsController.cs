@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
+using SSA_Final.Models;
+using SSA_Final.ViewModels;
 
 namespace SSA_Final.Controllers
 {
@@ -16,10 +18,25 @@ namespace SSA_Final.Controllers
             _scanStore = scanStore;
         }
 
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index([FromQuery] ScanQuery scanQuery)
         {
-            var scans = _scanStore.GetAll();
-            return View(scans);
+            _logger.LogInformation("Scan results page loaded at {Time}", DateTime.UtcNow);
+
+            if (!string.IsNullOrWhiteSpace(scanQuery.Query))
+            {
+                scanQuery.Page = 1;
+            }
+
+            var result = await _scanStore.GetPagedAsync(scanQuery);
+
+            var vm = new PagedResultViewModel<DomainScan>
+            {
+                Result = result,
+                Query = scanQuery.Query,
+                Mode = "table"
+            };
+
+            return View(vm);
         }
 
         public async Task<IActionResult> Details(Guid id)

@@ -7,6 +7,12 @@ namespace SSA_Final.Services
     {
         private readonly List<DomainScan> _scans = new();
         private readonly Lock _lock = new();
+        private readonly ISearchService _searchService;
+
+        public ScanStoreService(ISearchService searchService)
+        {
+            _searchService = searchService;
+        }
 
         public void Add(DomainScan scan)
         {
@@ -23,25 +29,53 @@ namespace SSA_Final.Services
             lock (_lock) { return _scans.FirstOrDefault(s => s.Id == id); }
         }
 
-        public async Task<IReadOnlyList<DomainScan>> GetAsync(ScanQuery query)
+        public Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
         {
-            query.Query = string.IsNullOrWhiteSpace(query.Query)
-                ? null
-                : query.Query.Trim();
+            query.Page = Math.Max(1, query.Page);
+            query.PageSize = Math.Clamp(query.PageSize, 1, 100);
 
             lock (_lock)
             {
-                var filtered = _scans.AsEnumerable();
+                IEnumerable<DomainScan> scanned = _scans;
 
-                if (!string.IsNullOrEmpty(query.Query))
+                List<DomainScan> items;
+                int total;
+
+                if (!string.IsNullOrWhiteSpace(query.Query))
                 {
-                    filtered = filtered.Where(s =>
-                        s.BaseDomain.Contains(query.Query, StringComparison.OrdinalIgnoreCase));
+                    var results = _searchService.Search(scanned, query.Query).ToList();
+
+                    query.Page = 1;
+
+                    total = results.Count;
+
+                    items = results
+                        .OrderByDescending(x => x.Score)
+                        .Skip((query.Page - 1) * query.PageSize)
+                        .Take(query.PageSize)
+                        .Select(x => x.Item)
+                        .ToList();
+                }
+                else
+                {
+                    total = scanned.Count();
+
+                    items = scanned
+                        .OrderByDescending(s => s.ScannedAt)
+                        .Skip((query.Page - 1) * query.PageSize)
+                        .Take(query.PageSize)
+                        .ToList();
                 }
 
-                return filtered
-                    .OrderByDescending(s => s.ScannedAt) // FIXED
-                    .ToList();
+                return Task.FromResult<IPagedResult<DomainScan>>(
+                    new PagedResult<DomainScan>
+                    {
+                        Items = items,
+                        TotalCount = total,
+                        Page = query.Page,
+                        PageSize = query.PageSize
+                    }
+                );
             }
         }
 
