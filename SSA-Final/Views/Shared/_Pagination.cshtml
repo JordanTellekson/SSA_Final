@@ -2,6 +2,8 @@
 
 @{
     var query = ViewData["Query"]?.ToString();
+    var status = ViewData["Status"];
+    var hasMalicious = ViewData["HasMalicious"];
 }
 
 @if (Model.TotalPages > 1)
@@ -11,7 +13,7 @@
 
             <li class="page-item @(Model.Page == 1 ? "disabled" : "")">
                 <a class="page-link"
-                       href="@Url.Action(null, new { page = Model.Page - 1, query })">
+                       href="@Url.Action(null, new { page = Model.Page - 1, query, status, hasMalicious })">
                     Previous
                 </a>
             </li>
@@ -20,7 +22,7 @@
             {
                 <li class="page-item @(i == Model.Page ? "active" : "")">
                     <a class="page-link"
-                           href="@Url.Action(null, new { page = i, query })">
+                           href="@Url.Action(null, new { page = i, query, status, hasMalicious })">
                         @i
                     </a>
                 </li>
@@ -28,7 +30,7 @@
 
             <li class="page-item @(Model.Page == Model.TotalPages ? "disabled" : "")">
                 <a class="page-link"
-                       href="@Url.Action(null, new { page = Model.Page + 1, query })">
+                       href="@Url.Action(null, new { page = Model.Page + 1, query, status, hasMalicious })">
                     Next
                 </a>
             </li>

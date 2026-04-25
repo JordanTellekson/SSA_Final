@@ -1,0 +1,52 @@
+﻿@using SSA_Final.Models
+@model ScanQuery
+
+<button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#filterModal">
+    Filters
+</button>
+
+<div class="modal fade" id="filterModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="get">
+                <div class="modal-header">
+                    <h5 class="modal-title">Filters</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <!-- Status Filter -->
+                    <div class="mb-3">
+                        <label>Status</label>
+                        <select name="Status" class="form-select">
+                            <option value="">All</option>
+                            <option value="Complete">Complete</option>
+                            <option value="CompleteWithResults">Complete w/ Results</option>
+                            <option value="Pending">Pending</option>
+                        </select>
+                    </div>
+
+                    <!-- Malicious Filter -->
+                    <div class="mb-3">
+                        <label>Threats</label>
+                        <select name="HasMalicious" class="form-select">
+                            <option value="">All</option>
+                            <option value="true">Has Suspicious</option>
+                            <option value="false">Clean Only</option>
+                        </select>
+                    </div>
+
+                    <!-- Preserve search -->
+                    <input type="hidden" name="query" value="@Model.Query" />
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Apply</button>
+                    <a href="?" class="btn btn-secondary">Clear</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

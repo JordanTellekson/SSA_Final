@@ -29,6 +29,9 @@ namespace SSA_Final.Controllers
 
             var result = await _scanStore.GetPagedAsync(scanQuery);
 
+            ViewData["Status"] = scanQuery.Status;
+            ViewData["HasMalicious"] = scanQuery.HasMalicious;
+
             var vm = new PagedResultViewModel<DomainScan>
             {
                 Result = result,

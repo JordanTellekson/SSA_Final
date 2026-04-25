@@ -10,14 +10,18 @@
 
 <h1>Scan History</h1>
 
+@await Html.PartialAsync("_Filters", new ScanQuery
+{
+    Query = Model.Query
+})
+@await Html.PartialAsync("_SearchBar", Model.Query)
+
 @if (!Model.Result.Items.Any())
 {
     <p class="text-muted">No scans yet. <a asp-controller="Dashboard" asp-action="Index">Start a scan.</a></p>
 }
 else
 {
-    
-    @await Html.PartialAsync("_SearchBar", Model.Query)
     @await Html.PartialAsync("_ScanList", new ScanListViewModel
     {
         Scans = Model.Result.Items,

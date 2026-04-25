@@ -41,6 +41,18 @@ namespace SSA_Final.Services
                 List<DomainScan> items;
                 int total;
 
+                if (query.Status.HasValue)
+                {
+                    scanned = scanned.Where(s => s.Status == query.Status.Value);
+                }
+
+                if (query.HasMalicious.HasValue)
+                {
+                    scanned = query.HasMalicious.Value
+                        ? scanned.Where(s => s.MaliciousCount > 0)
+                        : scanned.Where(s => s.MaliciousCount == 0);
+                }
+
                 if (!string.IsNullOrWhiteSpace(query.Query))
                 {
                     var results = _searchService.Search(scanned, query.Query).ToList();
