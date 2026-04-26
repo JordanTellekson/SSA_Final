@@ -13,7 +13,8 @@
 
             <li class="page-item @(Model.Page == 1 ? "disabled" : "")">
                 <a class="page-link"
-                       href="@Url.Action(null, new { page = Model.Page - 1, query, status, hasMalicious })">
+                       href="#"
+                       data-page="@(Model.Page - 1)">
                     Previous
                 </a>
             </li>
@@ -22,7 +23,8 @@
             {
                 <li class="page-item @(i == Model.Page ? "active" : "")">
                     <a class="page-link"
-                           href="@Url.Action(null, new { page = i, query, status, hasMalicious })">
+                           href="#"
+                           data-page="@i">
                         @i
                     </a>
                 </li>
@@ -30,7 +32,8 @@
 
             <li class="page-item @(Model.Page == Model.TotalPages ? "disabled" : "")">
                 <a class="page-link"
-                       href="@Url.Action(null, new { page = Model.Page + 1, query, status, hasMalicious })">
+                       href="#"
+                       data-page="@(Model.Page + 1)">
                     Next
                 </a>
             </li>

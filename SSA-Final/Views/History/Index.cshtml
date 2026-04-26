@@ -10,11 +10,14 @@
 
 <h1>Scan History</h1>
 
-@await Html.PartialAsync("_Filters", new ScanQuery
-{
-    Query = Model.Query
-})
-@await Html.PartialAsync("_SearchBar", Model.Query)
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    @await Html.PartialAsync("_Filters", new ScanQuery
+    {
+        Query = Model.Query
+    })
+
+    @await Html.PartialAsync("_SearchBar", Model.Query)
+</div>
 
 @if (!Model.Result.Items.Any())
 {
@@ -22,14 +25,9 @@
 }
 else
 {
-    @await Html.PartialAsync("_ScanList", new ScanListViewModel
-    {
-        Scans = Model.Result.Items,
-        Mode = "history",
-        Query = Model.Query
-    })
-
-    @await Html.PartialAsync("_Pagination", Model.Result)
+    <div id="resultsContainer">
+        @await Html.PartialAsync("_ScanList", Model)
+    </div>
 }
 
 @section Scripts {
@@ -37,4 +35,5 @@ else
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
         const tooltipList = [...tooltipTriggerList].map(el => new bootstrap.Tooltip(el))
     </script>
+    <script src="~/js/search.js"></script>
 }

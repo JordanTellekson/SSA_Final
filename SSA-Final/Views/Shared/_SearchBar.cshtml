@@ -1,6 +1,8 @@
 ﻿@model string?
 
-<form method="get"
+<form id="searchForm"
+      class="d-flex align-items-center"
+      method="get"
       asp-controller="@ViewContext.RouteData.Values["controller"]"
       asp-action="@ViewContext.RouteData.Values["action"]">
 
@@ -11,10 +13,21 @@
         <input type="hidden" name="id" value="@ViewContext.RouteData.Values["id"]" />
     }
 
-    <input type="text"
-           name="query"
-           value="@Model"
-           placeholder="Search domains or variants..." />
+    <div class="input-group">
 
-    <button type="submit">Search</button>
+        <input type="text"
+               id="searchInput"
+               name="query"
+               value="@Model"
+               class="form-control"
+               placeholder="Search domains..."
+               autocomplete="off" />
+
+        <button type="button"
+                id="resetBtn"
+                class="btn btn-outline-secondary">
+            Reset
+        </button>
+
+    </div>
 </form>

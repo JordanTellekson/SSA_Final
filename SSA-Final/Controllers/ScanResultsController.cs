@@ -36,8 +36,13 @@ namespace SSA_Final.Controllers
             {
                 Result = result,
                 Query = scanQuery.Query,
-                Mode = "table"
+                ViewType = "table"
             };
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return PartialView("_ScanList", vm);
+            }
 
             return View(vm);
         }

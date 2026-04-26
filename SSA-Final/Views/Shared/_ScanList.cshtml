@@ -1,10 +1,10 @@
 ﻿@using SSA_Final.ViewModels
-@model ScanListViewModel
+@model PagedResultViewModel<DomainScan>
 
-@if (Model.Mode == "history")
+@if (Model.ViewType == "history")
 {
     <ul class="list-group">
-        @foreach (var scan in Model.Scans)
+        @foreach (var scan in Model.Result.Items)
         {
             string orbClass;
             string tooltip;
@@ -26,8 +26,8 @@
 
             <li class="list-group-item d-flex align-items-center gap-3">
                 <div class="orb @orbClass flex-shrink-0"
-                     data-bs-toggle="tooltip"
-                     data-bs-title="@tooltip"></div>
+                        data-bs-toggle="tooltip"
+                        data-bs-title="@tooltip"></div>
 
                 <div class="flex-grow-1">
                     <strong>@scan.BaseDomain</strong>
@@ -45,7 +45,7 @@
                     }
                     <span class="text-muted small">@scan.Variants.Count variant(s)</span>
                     <a asp-controller="ScanResults" asp-action="Details" asp-route-id="@scan.Id"
-                           class="btn btn-sm btn-outline-primary">
+                            class="btn btn-sm btn-outline-primary">
                         View Scan
                     </a>
                 </div>
@@ -67,7 +67,7 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var scan in Model.Scans)
+            @foreach (var scan in Model.Result.Items)
             {
                 <tr>
                     <td><strong>@scan.BaseDomain</strong></td>
@@ -92,3 +92,5 @@ else
         </tbody>
     </table>
 }
+
+@await Html.PartialAsync("_Pagination", Model.Result)

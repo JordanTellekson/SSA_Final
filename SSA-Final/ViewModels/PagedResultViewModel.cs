@@ -1,4 +1,5 @@
 ﻿using SSA_Final.Interfaces;
+using SSA_Final.Models;
 
 namespace SSA_Final.ViewModels
 {
@@ -6,6 +7,6 @@ namespace SSA_Final.ViewModels
     {
         public IPagedResult<T> Result { get; set; } = default!;
         public string? Query { get; set; }
-        public string Mode { get; set; } = "table";
+        public string ViewType { get; set; } = "table";
     }
 }

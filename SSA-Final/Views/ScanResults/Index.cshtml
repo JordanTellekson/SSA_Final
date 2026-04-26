@@ -10,11 +10,14 @@
 
 <h1>Scan Results</h1>
 
-@await Html.PartialAsync("_Filters", new ScanQuery
-{
-    Query = Model.Query
-})
-@await Html.PartialAsync("_SearchBar", Model.Query)
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    @await Html.PartialAsync("_Filters", new ScanQuery
+    {
+        Query = Model.Query
+    })
+
+    @await Html.PartialAsync("_SearchBar", Model.Query)
+</div>
 
 @if (!Model.Result.Items.Any())
 {
@@ -22,12 +25,11 @@
 }
 else
 {
-    @await Html.PartialAsync("_ScanList", new ScanListViewModel
-    {
-        Scans = Model.Result.Items,
-        Mode = "table",
-        Query = Model.Query
-    })
+    <div id="resultsContainer">
+        @await Html.PartialAsync("_ScanList", Model)
+    </div>
+}
 
-    @await Html.PartialAsync("_Pagination", Model.Result)
+@section Scripts {
+    <script src="~/js/search.js"></script>
 }
