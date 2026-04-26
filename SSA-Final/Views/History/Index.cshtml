@@ -21,13 +21,21 @@ else
             string tooltip;
             switch (scan.Status)
             {
-                case DomainScanStatus.Complete:
-                    orbClass = "orb-success";
-                    tooltip = "Scan complete — no threats found";
+                case DomainScanStatus.Completed:
+                    if (scan.NumMaliciousDomains > 0)
+                    {
+                        orbClass = "orb-warning";
+                        tooltip = $"Scan complete — {scan.NumMaliciousDomains} suspicious domain(s)";
+                    }
+                    else
+                    {
+                        orbClass = "orb-success";
+                        tooltip = "Scan complete — no threats found";
+                    }
                     break;
-                case DomainScanStatus.CompleteWithResults:
+                case DomainScanStatus.Failed:
                     orbClass = "orb-warning";
-                    tooltip = $"Scan complete — {scan.MaliciousCount} suspicious domain(s)";
+                    tooltip = "Scan failed";
                     break;
                 default:
                     orbClass = "orb-pending";
@@ -42,15 +50,15 @@ else
 
                 <div class="flex-grow-1">
                     <strong>@scan.BaseDomain</strong>
-                    <small class="text-muted ms-2">@scan.ScannedAt.ToLocalTime().ToString("g")</small>
+                    <small class="text-muted ms-2">@scan.CreatedAt.ToLocalTime().ToString("g")</small>
                 </div>
 
                 <div class="d-flex gap-3 align-items-center">
-                    @if (scan.MaliciousCount > 0)
+                    @if (scan.NumMaliciousDomains > 0)
                     {
-                        <span class="badge bg-danger">@scan.MaliciousCount suspicious</span>
+                        <span class="badge bg-danger">@scan.NumMaliciousDomains suspicious</span>
                     }
-                    else if (scan.Status == DomainScanStatus.Complete)
+                    else if (scan.Status == DomainScanStatus.Completed)
                     {
                         <span class="badge bg-success">Clean</span>
                     }
