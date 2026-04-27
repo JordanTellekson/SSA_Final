@@ -15,22 +15,30 @@ namespace SSA_Final.Services
                 return source.Select(x => (x, 0));
 
             var normalizedQuery = Normalize(query);
-            var queryTokens = normalizedQuery
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var queryTokens = Tokenize(normalizedQuery);
 
             return source
                 .Select(scan =>
                 {
-                    var baseDomain = Normalize(scan.BaseDomain);
-                    var domainTokens = baseDomain
-                        .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    var normalizedBase = Normalize(scan.BaseDomain);
+                    var domainTokens = Tokenize(normalizedBase);
 
                     int score = ScoreDomain(domainTokens, queryTokens);
 
+                    if (normalizedBase == normalizedQuery)
+                        score += 200;
+
+                    foreach (var variant in scan.Variants)
+                    {
+                        var variantNormalized = Normalize(variant.DiscoveredDomain);
+                        var variantTokens = Tokenize(variantNormalized);
+
+                        score += ScoreDomain(variantTokens, queryTokens) / 2;
+                    }
+
                     return (scan, score);
                 })
-                .Where(x => x.score > 0)
-                .OrderByDescending(x => x.score);
+                .Where(x => x.score > 0);
         }
 
         private static int ScoreDomain(string[] domainTokens, string[] queryTokens)
@@ -39,33 +47,28 @@ namespace SSA_Final.Services
 
             foreach (var q in queryTokens)
             {
+                var prefix = q.Length >= 4 ? q[..3] : null;
+
                 foreach (var d in domainTokens)
                 {
                     if (d == q)
-                    {
-                        score += 100; // exact match
-                    }
+                        score += 100;
                     else if (d.StartsWith(q))
-                    {
-                        score += 60; // prefix match
-                    }
+                        score += 60;
                     else if (d.Contains(q))
-                    {
-                        score += 30; // contains match
-                    }
-                    else if (q.Length >= 4 && d.Contains(q.Substring(0, 3)))
-                    {
-                        score += 10; // weak fallback
-                    }
+                        score += 30;
+                    else if (prefix != null && d.StartsWith(prefix))
+                        score += 15;
                 }
             }
 
-            // small boost if whole query appears anywhere
-            var joined = string.Join(" ", domainTokens);
-            if (joined.Contains(string.Join(" ", queryTokens)))
-            {
+            var joined = string.Join("", domainTokens);
+            var queryJoined = string.Join("", queryTokens);
+
+            if (joined.Contains(queryJoined))
                 score += 40;
-            }
+
+            score -= domainTokens.Length * 5;
 
             return score;
         }
@@ -75,23 +78,38 @@ namespace SSA_Final.Services
             if (string.IsNullOrWhiteSpace(input))
                 return string.Empty;
 
+            input = input.ToLowerInvariant().Trim();
+
+            input = input
+                .Replace("https://", "")
+                .Replace("http://", "")
+                .Replace("www.", "");
+
+            var slashIndex = input.IndexOf('/');
+            if (slashIndex >= 0)
+                input = input.Substring(0, slashIndex);
+
+            var colonIndex = input.IndexOf(':');
+            if (colonIndex >= 0)
+                input = input.Substring(0, colonIndex);
+
             var normalized = input.Normalize(NormalizationForm.FormD);
             var sb = new StringBuilder();
 
             foreach (var c in normalized)
             {
-                var uc = CharUnicodeInfo.GetUnicodeCategory(c);
-                if (uc != UnicodeCategory.NonSpacingMark)
+                if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
                     sb.Append(c);
             }
 
-            return sb.ToString()
-                .Normalize(NormalizationForm.FormC)
-                .ToLowerInvariant()
-                .Replace("https://", "")
-                .Replace("http://", "")
-                .Replace("www.", "")
-                .Trim();
+            return sb.ToString().Normalize(NormalizationForm.FormC);
+        }
+
+        private static string[] Tokenize(string input)
+        {
+            return input.Split(
+                ['.', '-', '_', '/', '?', '&', '=', ':'],
+                StringSplitOptions.RemoveEmptyEntries);
         }
     }
 }

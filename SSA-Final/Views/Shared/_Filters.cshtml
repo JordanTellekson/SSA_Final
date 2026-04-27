@@ -21,9 +21,10 @@
                         <label>Status</label>
                         <select name="Status" class="form-select">
                             <option value="">All</option>
-                            <option value="Complete">Complete</option>
-                            <option value="CompleteWithResults">Complete w/ Results</option>
-                            <option value="Pending">Pending</option>
+                            <option value="Pending" selected="@(Model.Status == DomainScanStatus.Pending)">Pending</option>
+                            <option value="InProgress" selected="@(Model.Status == DomainScanStatus.InProgress)">In Progress</option>
+                            <option value="Completed" selected="@(Model.Status == DomainScanStatus.Completed)">Completed</option>
+                            <option value="Failed" selected="@(Model.Status == DomainScanStatus.Failed)">Failed</option>
                         </select>
                     </div>
 
@@ -32,13 +33,13 @@
                         <label>Threats</label>
                         <select name="HasMalicious" class="form-select">
                             <option value="">All</option>
-                            <option value="true">Has Suspicious</option>
-                            <option value="false">Clean Only</option>
+                            <option value="true" selected="@(Model.HasMalicious == true)">Has Suspicious</option>
+                            <option value="false" selected="@(Model.HasMalicious == false)">Clean Only</option>
                         </select>
                     </div>
 
                     <!-- Preserve search -->
-                    <input type="hidden" name="query" value="@Model.Query" />
+                    <input type="hidden" name="Query" value="@Model.Query" />
 
                 </div>
 

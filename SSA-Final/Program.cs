@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SSA_Final.Data;
 using SSA_Final.Interfaces;
 using SSA_Final.Services;
+using System.Threading.Channels;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,17 +31,61 @@ builder.Services.AddDbContext<SSA_FinalContext>(options =>
 
 logger.LogInformation("Database context configured with connection string.");
 
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient();
+
+builder.Services.AddSingleton<ISearchService, SearchService>();
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IDomainRiskAnalyzer, DomainRiskAnalyzerService>();
-builder.Services.AddSingleton<IScanStore, ScanStoreService>();
-builder.Services.AddSingleton<ISearchService, SearchService>();
+builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
+builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
+builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
 
+
+// Scan background job infrastructure: register an unbounded channel and expose both
+// ends separately so the controller only writes and the background service only reads.
+var scanChannel = Channel.CreateUnbounded<Guid>(new UnboundedChannelOptions
+{
+    SingleReader = true,   // Only ScanBackgroundService reads.
+    SingleWriter = false   // Multiple HTTP requests may write concurrently.
+});
+builder.Services.AddSingleton(scanChannel.Writer);
+builder.Services.AddSingleton(scanChannel.Reader);
+builder.Services.AddHostedService<ScanBackgroundService>();
+
+var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
+var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
+
+// 1. NoRedirect Client
+builder.Services.AddHttpClient("DomainAnalyzer.NoRedirect", client => {
+    client.Timeout = timeoutSpan;
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AllowAutoRedirect = false,
+    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+});
+
+// 2. Follow Client
+builder.Services.AddHttpClient("DomainAnalyzer.Follow", client => {
+    client.Timeout = timeoutSpan;
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AllowAutoRedirect = true,
+    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+});
+
+logger.LogInformation("Registered ISearchService -> SearchService (Singleton).");
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IDomainRiskAnalyzer -> DomainRiskAnalyzerService (Scoped).");
-logger.LogInformation("Registered IScanStore -> ScanStoreService (Singleton).");
-logger.LogInformation("Registered ISearchService -> SearchService (Singleton).");
+logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
+logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
+logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow.");
+logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
+logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
 
 // Configure Identity
 builder.Services.AddDefaultIdentity<IdentityUser>(options =>

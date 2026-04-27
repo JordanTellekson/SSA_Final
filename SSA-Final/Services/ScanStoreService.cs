@@ -19,14 +19,31 @@ namespace SSA_Final.Services
             lock (_lock) { _scans.Add(scan); }
         }
 
+        public void Update(DomainScan scan)
+        {
+            lock (_lock)
+            {
+                var index = _scans.FindIndex(s => s.Id == scan.Id);
+                if (index >= 0)
+                {
+                    _scans[index] = scan;
+                }
+            }
+        }
+
         public List<DomainScan> GetAll()
         {
-            lock (_lock) { return _scans.OrderByDescending(s => s.ScannedAt).ToList(); }
+            lock (_lock) { return _scans.OrderByDescending(s => s.CreatedAt).ToList(); }
         }
 
         public DomainScan? GetById(Guid id)
         {
             lock (_lock) { return _scans.FirstOrDefault(s => s.Id == id); }
+        }
+
+        public List<DomainScan> GetPendingScans()
+        {
+            lock (_lock) { return _scans.Where(s => s.Status == DomainScanStatus.Pending).ToList(); }
         }
 
         public Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
@@ -49,8 +66,8 @@ namespace SSA_Final.Services
                 if (query.HasMalicious.HasValue)
                 {
                     scanned = query.HasMalicious.Value
-                        ? scanned.Where(s => s.MaliciousCount > 0)
-                        : scanned.Where(s => s.MaliciousCount == 0);
+                        ? scanned.Where(s => s.NumMaliciousDomains > 0)
+                        : scanned.Where(s => s.NumMaliciousDomains == 0);
                 }
 
                 if (!string.IsNullOrWhiteSpace(query.Query))
@@ -73,7 +90,7 @@ namespace SSA_Final.Services
                     total = scanned.Count();
 
                     items = scanned
-                        .OrderByDescending(s => s.ScannedAt)
+                        .OrderByDescending(s => s.CreatedAt)
                         .Skip((query.Page - 1) * query.PageSize)
                         .Take(query.PageSize)
                         .ToList();
@@ -112,7 +129,7 @@ namespace SSA_Final.Services
                 if (!string.IsNullOrEmpty(query.Query))
                 {
                     variants = variants.Where(v =>
-                        v.Domain.Contains(query.Query, StringComparison.OrdinalIgnoreCase)); // ✅ FIXED
+                        v.DiscoveredDomain.Contains(query.Query, StringComparison.OrdinalIgnoreCase)); // ✅ FIXED
                 }
 
                 return Task.FromResult<IReadOnlyList<DomainAnalysisResult>>(
