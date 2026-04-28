@@ -1,0 +1,24 @@
+using System;
+
+namespace SSA_Final.Services
+{
+    public class RiskClassificationService
+    {
+        public string GetRiskLevel(int score)
+        {
+            if (score < 0 || score > 100)
+                return "Unknown";
+
+            if (score <= 24)
+                return "Low";
+
+            if (score <= 49)
+                return "Medium";
+
+            if (score <= 74)
+                return "High";
+
+            return "Critical";
+        }
+    }
+}
