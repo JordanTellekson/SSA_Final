@@ -113,5 +113,28 @@ These require crawling or sandboxing the page.
         -   Temporarily compromised legitimate domains
         -   Recently cleaned domains still present in cached or historical feed data
     -   Blocklist matches are treated as high-confidence indicators and override all heuristic-based risk scoring
-
 > Written with [StackEdit](https://stackedit.io/).
+
+## Risk Score Classification
+
+The system maps numeric risk scores (0–100) into classification levels:
+
+- Low (0–24): Minimal suspicious indicators
+- Medium (25–49): Some suspicious patterns present
+- High (50–74): Strong indicators of phishing behavior
+- Critical (75–100): Highly likely or confirmed phishing activity
+
+### Rationale
+
+Lower scores represent domains with few or weak signals.  
+Higher scores reflect multiple strong indicators such as typosquatting, suspicious subdomains, or abnormal patterns.
+
+### Validation Examples
+
+- google.com → Low  
+- amazon.com → Low  
+- paypa1-login-secure.com → High  
+- verify-account-paypal-alert.xyz → Critical  
+- randomdomain123.biz → Medium  
+
+Safe domains should not reach High or Critical classifications.
