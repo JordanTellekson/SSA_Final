@@ -19,14 +19,21 @@
     @await Html.PartialAsync("_SearchBar", Model.Query)
 </div>
 
-@if (!Model.Result.Items.Any())
+@if (!Model.HasAnyScans)
 {
     <p class="text-muted">No scans yet. <a asp-controller="Dashboard" asp-action="Index">Start a scan.</a></p>
 }
 else
 {
     <div id="resultsContainer">
-        @await Html.PartialAsync("_ScanList", Model)
+        @if (!Model.Result.Items.Any())
+        {
+            <p>Sorry, we couldn't find any matching results.</p>
+        }
+        else
+        {
+            @await Html.PartialAsync("_ScanList", Model)
+        }
     </div>
 }
 

@@ -28,6 +28,7 @@ namespace SSA_Final.Controllers
             }
 
             var result = await _scanStore.GetPagedAsync(scanQuery);
+            var hasAnyScans = await _scanStore.GetAnyAsync();
 
             ViewData["Status"] = scanQuery.Status;
             ViewData["HasMalicious"] = scanQuery.HasMalicious;
@@ -36,7 +37,8 @@ namespace SSA_Final.Controllers
             {
                 Result = result,
                 Query = scanQuery.Query,
-                ViewType = "history"
+                ViewType = "history",
+                HasAnyScans = hasAnyScans
             };
 
             if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")

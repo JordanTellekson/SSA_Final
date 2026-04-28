@@ -46,6 +46,11 @@ namespace SSA_Final.Services
             lock (_lock) { return _scans.Where(s => s.Status == DomainScanStatus.Pending).ToList(); }
         }
 
+        public Task<bool> GetAnyAsync()
+        {
+            lock (_lock) { return Task.FromResult(_scans.Count == 0); }
+        }
+
         public Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
         {
             query.Page = Math.Max(1, query.Page);
@@ -124,12 +129,12 @@ namespace SSA_Final.Services
                     return Task.FromResult<IReadOnlyList<DomainAnalysisResult>>(
                         new List<DomainAnalysisResult>());
 
-                var variants = scan.Variants.AsEnumerable(); // ✅ FIXED
+                var variants = scan.Variants.AsEnumerable();
 
                 if (!string.IsNullOrEmpty(query.Query))
                 {
                     variants = variants.Where(v =>
-                        v.DiscoveredDomain.Contains(query.Query, StringComparison.OrdinalIgnoreCase)); // ✅ FIXED
+                        v.DiscoveredDomain.Contains(query.Query, StringComparison.OrdinalIgnoreCase));
                 }
 
                 return Task.FromResult<IReadOnlyList<DomainAnalysisResult>>(

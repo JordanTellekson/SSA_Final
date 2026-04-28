@@ -57,6 +57,11 @@ namespace SSA_Final.Services
                 .ToList();
         }
 
+        public async Task<bool> GetAnyAsync()
+        {
+            return await _dbContext.DomainScans.AnyAsync();
+        }
+
         public async Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
         {
             query.Page = Math.Max(1, query.Page);
