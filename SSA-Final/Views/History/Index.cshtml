@@ -1,5 +1,7 @@
 ﻿@using SSA_Final.Models
-@model List<DomainScan>
+@using SSA_Final.ViewModels
+@using SSA_Final.Interfaces
+@model PagedResultViewModel<DomainScan>
 
 @{
     ViewData["Title"] = "History";
@@ -8,69 +10,31 @@
 
 <h1>Scan History</h1>
 
-@if (!Model.Any())
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    @await Html.PartialAsync("_Filters", new ScanQuery
+    {
+        Query = Model.Query
+    })
+
+    @await Html.PartialAsync("_SearchBar", Model.Query)
+</div>
+
+@if (!Model.HasAnyScans)
 {
     <p class="text-muted">No scans yet. <a asp-controller="Dashboard" asp-action="Index">Start a scan.</a></p>
 }
 else
 {
-    <ul class="list-group">
-        @foreach (var scan in Model)
+    <div id="resultsContainer">
+        @if (!Model.Result.Items.Any())
         {
-            string orbClass;
-            string tooltip;
-            switch (scan.Status)
-            {
-                case DomainScanStatus.Completed:
-                    if (scan.NumMaliciousDomains > 0)
-                    {
-                        orbClass = "orb-warning";
-                        tooltip = $"Scan complete — {scan.NumMaliciousDomains} suspicious domain(s)";
-                    }
-                    else
-                    {
-                        orbClass = "orb-success";
-                        tooltip = "Scan complete — no threats found";
-                    }
-                    break;
-                case DomainScanStatus.Failed:
-                    orbClass = "orb-warning";
-                    tooltip = "Scan failed";
-                    break;
-                default:
-                    orbClass = "orb-pending";
-                    tooltip = "Scan in progress";
-                    break;
-            }
-
-            <li class="list-group-item d-flex align-items-center gap-3">
-                <div class="orb @orbClass flex-shrink-0"
-                     data-bs-toggle="tooltip"
-                     data-bs-title="@tooltip"></div>
-
-                <div class="flex-grow-1">
-                    <strong>@scan.BaseDomain</strong>
-                    <small class="text-muted ms-2">@scan.CreatedAt.ToLocalTime().ToString("g")</small>
-                </div>
-
-                <div class="d-flex gap-3 align-items-center">
-                    @if (scan.NumMaliciousDomains > 0)
-                    {
-                        <span class="badge bg-danger">@scan.NumMaliciousDomains suspicious</span>
-                    }
-                    else if (scan.Status == DomainScanStatus.Completed)
-                    {
-                        <span class="badge bg-success">Clean</span>
-                    }
-                    <span class="text-muted small">@scan.Variants.Count variant(s)</span>
-                    <a asp-controller="ScanResults" asp-action="Details" asp-route-id="@scan.Id"
-                           class="btn btn-sm btn-outline-primary">
-                        View Scan
-                    </a>
-                </div>
-            </li>
+            <p>Sorry, we couldn't find any matching results.</p>
         }
-    </ul>
+        else
+        {
+            @await Html.PartialAsync("_ScanList", Model)
+        }
+    </div>
 }
 
 @section Scripts {
@@ -78,4 +42,5 @@ else
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
         const tooltipList = [...tooltipTriggerList].map(el => new bootstrap.Tooltip(el))
     </script>
+    <script src="~/js/search.js"></script>
 }

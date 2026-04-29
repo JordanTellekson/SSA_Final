@@ -9,5 +9,10 @@ namespace SSA_Final.Interfaces
         List<DomainScan> GetAll();
         DomainScan? GetById(Guid id);
         List<DomainScan> GetPendingScans();
+        Task<bool> GetAnyAsync();
+        Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query);
+        Task<IReadOnlyList<DomainAnalysisResult>> GetVariantsAsync(
+            Guid scanId,
+            VariantQuery query);
     }
 }

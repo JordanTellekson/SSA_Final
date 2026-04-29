@@ -34,12 +34,14 @@ logger.LogInformation("Database context configured with connection string.");
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 
+builder.Services.AddSingleton<ISearchService, SearchService>();
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IDomainRiskAnalyzer, DomainRiskAnalyzerService>();
 builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
+
 
 // Scan background job infrastructure: register an unbounded channel and expose both
 // ends separately so the controller only writes and the background service only reads.
@@ -75,6 +77,7 @@ builder.Services.AddHttpClient("DomainAnalyzer.Follow", client => {
     ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
 });
 
+logger.LogInformation("Registered ISearchService -> SearchService (Singleton).");
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IDomainRiskAnalyzer -> DomainRiskAnalyzerService (Scoped).");

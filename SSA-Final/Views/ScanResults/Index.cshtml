@@ -1,5 +1,7 @@
 ﻿@using SSA_Final.Models
-@model List<DomainScan>
+@using SSA_Final.ViewModels
+@using SSA_Final.Interfaces
+@model PagedResultViewModel<DomainScan>
 
 @{
     ViewData["Title"] = "Scan Results";
@@ -8,48 +10,33 @@
 
 <h1>Scan Results</h1>
 
-@if (!Model.Any())
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    @await Html.PartialAsync("_Filters", new ScanQuery
+    {
+        Query = Model.Query
+    })
+
+    @await Html.PartialAsync("_SearchBar", Model.Query)
+</div>
+
+@if (!Model.HasAnyScans)
 {
     <p class="text-muted">No scans yet. <a asp-controller="Dashboard" asp-action="Index">Start a scan.</a></p>
 }
 else
 {
-    <table class="table table-hover">
-        <thead>
-            <tr>
-                <th>Base Domain</th>
-                <th>Scanned At</th>
-                <th>Finished</th>
-                <th>Variants</th>
-                <th>Suspicious</th>
-                <th>Status</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var scan in Model)
-            {
-                <tr>
-                    <td><strong>@scan.BaseDomain</strong></td>
-                    <td>@scan.CreatedAt.ToLocalTime().ToString("g")</td>
-                    <td>@(scan.TimeFinished?.ToLocalTime().ToString("g") ?? "—")</td>
-                    <td>@scan.Variants.Count</td>
-                    <td>
-                        @if (scan.NumMaliciousDomains > 0)
-                        {
-                            <span class="badge bg-danger">@scan.NumMaliciousDomains</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-success">0</span>
-                        }
-                    </td>
-                    <td>@scan.Status</td>
-                    <td>
-                        <a asp-action="Details" asp-route-id="@scan.Id" class="btn btn-sm btn-outline-primary">View Details</a>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div id="resultsContainer">
+        @if (!Model.Result.Items.Any())
+        {
+            <p>Sorry, we couldn't find any matching results.</p>
+        }
+        else
+        {
+            @await Html.PartialAsync("_ScanList", Model)
+        }
+    </div>
+}
+
+@section Scripts {
+    <script src="~/js/search.js"></script>
 }

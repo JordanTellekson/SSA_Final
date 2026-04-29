@@ -1,4 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using SSA_Final.Models;
+using SSA_Final.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
 
@@ -16,11 +18,35 @@ namespace SSA_Final.Controllers
             _scanStore = scanStore;
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index([FromQuery] ScanQuery scanQuery)
         {
             _logger.LogInformation("History page loaded at {Time}", DateTime.UtcNow);
-            var scans = _scanStore.GetAll();
-            return View(scans);
+
+            if (!string.IsNullOrWhiteSpace(scanQuery.Query))
+            {
+                scanQuery.Page = 1;
+            }
+
+            var result = await _scanStore.GetPagedAsync(scanQuery);
+            var hasAnyScans = await _scanStore.GetAnyAsync();
+
+            ViewData["Status"] = scanQuery.Status;
+            ViewData["HasMalicious"] = scanQuery.HasMalicious;
+            
+            var vm = new PagedResultViewModel<DomainScan>
+            {
+                Result = result,
+                Query = scanQuery.Query,
+                ViewType = "history",
+                HasAnyScans = hasAnyScans
+            };
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return PartialView("_ScanList", vm);
+            }
+
+            return View(vm);
         }
     }
 }

@@ -1,0 +1,33 @@
+﻿@model string?
+
+<form id="searchForm"
+      class="d-flex align-items-center"
+      method="get"
+      asp-controller="@ViewContext.RouteData.Values["controller"]"
+      asp-action="@ViewContext.RouteData.Values["action"]">
+
+    <input type="hidden" name="page" value="1" />
+
+    @if (ViewContext.RouteData.Values["id"] != null)
+    {
+        <input type="hidden" name="id" value="@ViewContext.RouteData.Values["id"]" />
+    }
+
+    <div class="input-group">
+
+        <input type="text"
+               id="searchInput"
+               name="query"
+               value="@Model"
+               class="form-control"
+               placeholder="Search domains..."
+               autocomplete="off" />
+
+        <button type="button"
+                id="resetBtn"
+                class="btn btn-outline-secondary">
+            Reset
+        </button>
+
+    </div>
+</form>
