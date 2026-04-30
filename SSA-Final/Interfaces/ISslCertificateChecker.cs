@@ -1,4 +1,6 @@
-﻿namespace SSA_Final.Interfaces
+// Contract for extracting SSL/TLS certificate-based phishing indicators.
+
+namespace SSA_Final.Interfaces
 {
     /// <summary>
     /// Inspects the SSL/TLS certificate of a domain and returns a list of
@@ -16,3 +18,4 @@
             CancellationToken cancellationToken);
     }
 }
+

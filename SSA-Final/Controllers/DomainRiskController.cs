@@ -1,3 +1,6 @@
+// API controller exposing domain risk analysis and active-domain matching endpoints.
+// Returns structured scoring payloads used by client integrations.
+
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
 using SSA_Final.Models;
@@ -45,3 +48,5 @@ namespace SSA_Final.Controllers
         }
     }
 }
+
+

@@ -1,3 +1,5 @@
+// Contract for structural risk scoring and known-active domain checks.
+
 using SSA_Final.Models;
 
 namespace SSA_Final.Interfaces
@@ -9,3 +11,5 @@ namespace SSA_Final.Interfaces
         Task<DomainRiskAnalysisResult> AnalyzeDomainRiskAsync(string? domainInput);
     }
 }
+
+

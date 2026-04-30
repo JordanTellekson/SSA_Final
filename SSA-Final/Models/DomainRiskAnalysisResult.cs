@@ -1,3 +1,5 @@
+// Immutable response model containing risk score signals for a domain.
+
 namespace SSA_Final.Models
 {
     // Immutable payload returned by phishing-risk analysis.
@@ -85,3 +87,5 @@ namespace SSA_Final.Models
         }
     }
 }
+
+

@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
+// MVC controller for authenticated scan history views.
+// Retrieves completed and in-progress scan records from the shared scan store.
+
+using Microsoft.AspNetCore.Authorization;
 using SSA_Final.Models;
 using SSA_Final.ViewModels;
 using Microsoft.AspNetCore.Mvc;
@@ -50,3 +53,4 @@ namespace SSA_Final.Controllers
         }
     }
 }
+

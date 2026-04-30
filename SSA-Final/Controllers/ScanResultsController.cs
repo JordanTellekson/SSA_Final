@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
+// MVC controller for authenticated scan result listings and details.
+// Provides summary and per-scan drill-down views over persisted scan data.
+
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
 using SSA_Final.Models;
@@ -78,3 +81,4 @@ namespace SSA_Final.Controllers
         }
     }
 }
+

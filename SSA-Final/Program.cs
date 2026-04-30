@@ -1,3 +1,7 @@
+// Application bootstrap and dependency wiring for the SSA_Final web app.
+// Configures logging, database access, dependency injection, HTTP clients,
+// authentication, middleware, and endpoint routing.
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SSA_Final.Data;
@@ -135,3 +139,4 @@ app.MapRazorPages();
 
 logger.LogInformation("Application configured and ready to run.");
 app.Run();
+

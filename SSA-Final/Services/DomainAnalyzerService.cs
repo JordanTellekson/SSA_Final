@@ -1,4 +1,7 @@
-﻿using SSA_Final.Interfaces;
+// Core analyzer implementation that combines static heuristics and network checks.
+// Produces domain-level suspicion indicators and an explainable summary.
+
+using SSA_Final.Interfaces;
 using SSA_Final.Models;
 using System.Net;
 using System.Net.Sockets;
@@ -13,26 +16,7 @@ namespace SSA_Final.Services
         private readonly ILogger<DomainAnalyzerService> _logger;
         private readonly int _timeoutSeconds;
 
-        // ── Static-check data ─────────────────────────────────────────────────
-
-        private static readonly HashSet<string> SuspiciousTlds =
-            new(StringComparer.OrdinalIgnoreCase)
-            {
-                ".xyz", ".top", ".tk", ".ru", ".pw", ".cc",
-                ".buzz", ".gq", ".ml", ".cf", ".ga", ".info"
-            };
-
-        private static readonly string[] SuspiciousPrefixes =
-        {
-            "secure-", "login-", "account-", "verify-",
-            "update-", "banking-", "confirm-", "signin-", "webscr-"
-        };
-
-        private static readonly string[] SuspiciousSuffixes =
-        {
-            "-secure", "-login", "-account",
-            "-verify", "-update", "-confirm", "-signin"
-        };
+        // ── Structural-risk data ──────────────────────────────────────────────
 
         private static readonly string[] KnownBrands =
         {
@@ -86,15 +70,16 @@ namespace SSA_Final.Services
 
             var indicators = new List<string>();
 
-            // Pass 0 — Static domain checks (no network I/O; always runs)
-            RunStaticChecks(domain, indicators);
+            // Pass 0 — Structural risk checks (no network I/O; always runs)
+            var riskResult = AnalyzeDomainRisk(domain);
+            AddRiskIndicators(riskResult, indicators);
 
             // Passes 1–3 — Network checks (redirect, SSL, HTML content)
             await RunNetworkChecksAsync(domain, indicators);
 
             var isSuspicious = indicators.Count > 0;
             var summary = isSuspicious
-                ? $"Domain flagged with {indicators.Count} indicator(s): {string.Join("; ", indicators)}."
+                ? $"Domain flagged with {indicators.Count} indicator(s), risk score {riskResult.OverallRiskScore}: {string.Join("; ", indicators)}."
                 : "No phishing indicators detected.";
 
             _logger.LogInformation(
@@ -112,60 +97,287 @@ namespace SSA_Final.Services
             };
         }
 
-        // ── Pass 0: Static checks (Phishing_Indicators.md reference) ─────────
+        // ── Pass 0: Structural risk checks ────────────────────────────────────
 
-        private static void RunStaticChecks(string domain, List<string> indicators)
+        public DomainRiskAnalysisResult AnalyzeDomainRisk(string domain)
         {
-            // IP address used in place of a real domain name.
-            if (IPAddress.TryParse(domain, out _))
+            var normalizedDomain = NormalizeDomain(domain);
+            if (string.IsNullOrWhiteSpace(normalizedDomain))
             {
-                indicators.Add("IP address used in place of a domain name");
-                return; // Further string checks are meaningless for an IP literal.
+                return DomainRiskAnalysisResult.InvalidInput();
             }
 
-            var labels = domain.Split('.', StringSplitOptions.RemoveEmptyEntries);
-            var lowerDomain = domain.ToLowerInvariant();
+            var typosquatting = CalculateTyposquattingScore(normalizedDomain);
+            var subdomain = CalculateSubdomainScore(normalizedDomain);
+            var hyphen = CalculateHyphenScore(normalizedDomain);
+            var entropy = CalculateEntropyScore(normalizedDomain);
 
-            // Excessive subdomains: more than 2 labels before the TLD.
-            // e.g. login.secure.verify.paypal.com has 3 subdomain labels.
-            if (labels.Length > 4)
-                indicators.Add(
-                    $"Excessive subdomains detected ({labels.Length - 2} subdomain labels)");
+            var overallRisk = typosquatting.Score + subdomain.Score + hyphen.Score + entropy.Score;
 
-            // Hyphen abuse: 3+ hyphens is a blanket flag;
-            // fewer hyphens are still checked for known phishing keyword patterns.
-            var hyphenCount = lowerDomain.Count(c => c == '-');
-            if (hyphenCount >= 3)
+            return new DomainRiskAnalysisResult(
+                inputDomain: normalizedDomain,
+                isKnownActiveDomain: false,
+                isValidDomain: true,
+                overallRiskScore: overallRisk,
+                typosquattingEditDistance: typosquatting,
+                excessiveSubdomains: subdomain,
+                hyphenAbuse: hyphen,
+                shannonEntropy: entropy,
+                isBlocklistMatch: false,
+                blocklistSource: null,
+                usedBlocklistFallback: false);
+        }
+
+        private static void AddRiskIndicators(DomainRiskAnalysisResult riskResult, List<string> indicators)
+        {
+            var signals = new[]
             {
-                indicators.Add($"Hyphen abuse detected ({hyphenCount} hyphens in domain)");
-            }
-            else
+                riskResult.TyposquattingEditDistance,
+                riskResult.ExcessiveSubdomains,
+                riskResult.HyphenAbuse,
+                riskResult.ShannonEntropy
+            };
+
+            foreach (var signal in signals)
             {
-                var prefix = Array.Find(SuspiciousPrefixes,
-                    p => lowerDomain.Contains(p, StringComparison.Ordinal));
-                if (prefix is not null)
-                    indicators.Add($"Suspicious phishing prefix detected: '{prefix}'");
-
-                var suffix = Array.Find(SuspiciousSuffixes,
-                    s => lowerDomain.Contains(s, StringComparison.Ordinal));
-                if (suffix is not null)
-                    indicators.Add($"Suspicious phishing suffix detected: '{suffix}'");
+                if (signal.Triggered)
+                {
+                    indicators.Add($"{signal.Signal}: {signal.Detail}");
+                }
             }
+        }
 
-            // Suspicious TLD.
-            if (labels.Length >= 2)
+        private static DomainRiskSignalScore CalculateTyposquattingScore(string normalizedDomain)
+        {
+            var rootLabel = GetRootDomainLabel(normalizedDomain);
+            if (string.IsNullOrWhiteSpace(rootLabel))
             {
-                var tld = $".{labels[^1]}";
-                if (SuspiciousTlds.Contains(tld))
-                    indicators.Add($"Suspicious TLD detected: '{tld}'");
+                return new DomainRiskSignalScore("Typosquatting/Edit Distance", 0, false, "No root label available.");
             }
 
-            // Brand keyword stuffing: 2+ known brand names packed into one domain.
-            var matched = Array.FindAll(KnownBrands,
-                b => lowerDomain.Contains(b, StringComparison.Ordinal));
-            if (matched.Length >= 2)
-                indicators.Add(
-                    $"Brand keyword stuffing detected: {string.Join(", ", matched)}");
+            var closestBrand = string.Empty;
+            var minDistance = int.MaxValue;
+            foreach (var brand in KnownBrands)
+            {
+                if (Math.Abs(brand.Length - rootLabel.Length) > 3)
+                {
+                    continue;
+                }
+
+                var distance = CalculateLevenshteinDistance(rootLabel, brand, 3);
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                    closestBrand = brand;
+                }
+
+                if (minDistance == 0)
+                {
+                    break;
+                }
+            }
+
+            var score = minDistance switch
+            {
+                1 => 25,
+                2 => 18,
+                3 => 10,
+                _ => 0
+            };
+
+            return new DomainRiskSignalScore(
+                "Typosquatting/Edit Distance",
+                score,
+                score > 0,
+                score > 0
+                    ? $"Root label '{rootLabel}' is {minDistance} edit(s) from known brand '{closestBrand}'."
+                    : "No suspicious root-label edit-distance match detected.");
+        }
+
+        private static DomainRiskSignalScore CalculateSubdomainScore(string normalizedDomain)
+        {
+            var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            labels = labels.Concat(normalizedDomain.Split('-', StringSplitOptions.RemoveEmptyEntries)).ToArray();
+
+            var subdomainCount = Math.Max(labels.Length - 2, 0);
+
+            var score = subdomainCount switch
+            {
+                <= 1 => 0,
+                2 => 8,
+                3 => 16,
+                _ => 25
+            };
+
+            return new DomainRiskSignalScore(
+                "Excessive Subdomains",
+                score,
+                score > 0,
+                $"Detected {subdomainCount} subdomain label(s).");
+        }
+
+        private static DomainRiskSignalScore CalculateHyphenScore(string normalizedDomain)
+        {
+            var hyphenCount = normalizedDomain.Count(c => c == '-');
+            var repeatedPatternCount = Regex.Matches(normalizedDomain, "--").Count;
+
+            var score = hyphenCount switch
+            {
+                0 => 0,
+                1 => 6,
+                2 => 12,
+                3 => 18,
+                _ => 25
+            };
+
+            if (repeatedPatternCount > 0)
+            {
+                score = Math.Min(25, score + repeatedPatternCount * 2);
+            }
+
+            return new DomainRiskSignalScore(
+                "Hyphen Abuse",
+                score,
+                score > 0,
+                $"Detected {hyphenCount} hyphen(s) and {repeatedPatternCount} repeated hyphen pattern(s).");
+        }
+
+        private static DomainRiskSignalScore CalculateEntropyScore(string normalizedDomain)
+        {
+            var sample = new string(normalizedDomain.Where(char.IsLetterOrDigit).ToArray());
+            var entropy = CalculateShannonEntropy(sample);
+
+            var score = entropy switch
+            {
+                < 3.0 => 0,
+                < 3.4 => 8,
+                < 3.8 => 16,
+                _ => 25
+            };
+
+            var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            var longestLabel = labels.Length == 0 ? 0 : labels.Max(label => label.Length);
+            if (longestLabel >= 15 && entropy >= 3.5)
+            {
+                score = Math.Min(25, score + 4);
+            }
+
+            return new DomainRiskSignalScore(
+                "Shannon Entropy",
+                score,
+                score > 0,
+                $"Calculated entropy across alphanumeric characters is {entropy:F2}.");
+        }
+
+        private static string GetRootDomainLabel(string normalizedDomain)
+        {
+            var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            if (labels.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            if (labels.Length == 1)
+            {
+                return labels[0].ToLowerInvariant();
+            }
+
+            return labels[^2].ToLowerInvariant();
+        }
+
+        private static int CalculateLevenshteinDistance(string a, string b, int maxDistance)
+        {
+            if (Math.Abs(a.Length - b.Length) > maxDistance)
+            {
+                return maxDistance + 1;
+            }
+
+            var previous = new int[b.Length + 1];
+            var current = new int[b.Length + 1];
+
+            for (var j = 0; j <= b.Length; j++)
+            {
+                previous[j] = j;
+            }
+
+            for (var i = 1; i <= a.Length; i++)
+            {
+                current[0] = i;
+                var rowMin = current[0];
+
+                for (var j = 1; j <= b.Length; j++)
+                {
+                    var cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                    current[j] = Math.Min(
+                        Math.Min(current[j - 1] + 1, previous[j] + 1),
+                        previous[j - 1] + cost);
+                    rowMin = Math.Min(rowMin, current[j]);
+                }
+
+                if (rowMin > maxDistance)
+                {
+                    return maxDistance + 1;
+                }
+
+                (previous, current) = (current, previous);
+            }
+
+            return previous[b.Length];
+        }
+
+        private static double CalculateShannonEntropy(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+            {
+                return 0;
+            }
+
+            var counts = new Dictionary<char, int>();
+            foreach (var c in input)
+            {
+                counts[c] = counts.TryGetValue(c, out var count) ? count + 1 : 1;
+            }
+
+            double entropy = 0;
+            foreach (var count in counts.Values)
+            {
+                var p = (double)count / input.Length;
+                entropy -= p * Math.Log2(p);
+            }
+
+            return entropy;
+        }
+
+        private static string? NormalizeDomain(string? rawDomain)
+        {
+            if (string.IsNullOrWhiteSpace(rawDomain))
+            {
+                return null;
+            }
+
+            var value = rawDomain.Trim();
+            if (!value.Contains("://", StringComparison.Ordinal))
+            {
+                value = "http://" + value;
+            }
+
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            {
+                return null;
+            }
+
+            var host = uri.Host.Trim().TrimEnd('.');
+            if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+            {
+                host = host[4..];
+            }
+
+            if (IPAddress.TryParse(host, out _))
+            {
+                return null;
+            }
+
+            return string.IsNullOrWhiteSpace(host) ? null : host.ToLowerInvariant();
         }
 
         // ── Passes 1–3: Network checks ────────────────────────────────────────
@@ -335,3 +547,4 @@ namespace SSA_Final.Services
         }
     }
 }
+
