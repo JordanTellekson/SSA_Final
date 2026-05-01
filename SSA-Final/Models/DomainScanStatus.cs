@@ -1,4 +1,6 @@
-﻿using System.ComponentModel;
+// Enumeration describing the lifecycle state of a domain scan run.
+
+using System.ComponentModel;
 
 namespace SSA_Final.Models
 {
@@ -17,3 +19,5 @@ namespace SSA_Final.Models
         Failed
     }
 }
+
+

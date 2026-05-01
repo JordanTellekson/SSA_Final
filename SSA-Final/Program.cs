@@ -1,3 +1,7 @@
+// Application bootstrap and dependency wiring for the SSA_Final web app.
+// Configures logging, database access, dependency injection, HTTP clients,
+// authentication, middleware, and endpoint routing.
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SSA_Final.Data;
@@ -37,7 +41,6 @@ builder.Services.AddHttpClient();
 builder.Services.AddSingleton<ISearchService, SearchService>();
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
-builder.Services.AddScoped<IDomainRiskAnalyzer, DomainRiskAnalyzerService>();
 builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
@@ -80,7 +83,6 @@ builder.Services.AddHttpClient("DomainAnalyzer.Follow", client => {
 logger.LogInformation("Registered ISearchService -> SearchService (Singleton).");
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
-logger.LogInformation("Registered IDomainRiskAnalyzer -> DomainRiskAnalyzerService (Scoped).");
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
 logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow.");
@@ -135,3 +137,4 @@ app.MapRazorPages();
 
 logger.LogInformation("Application configured and ready to run.");
 app.Run();
+

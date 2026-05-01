@@ -1,4 +1,6 @@
-﻿namespace SSA_Final.Models
+// Result model for phishing blocklist lookup responses.
+
+namespace SSA_Final.Models
 {
     public class BlocklistCheckResult
     {
@@ -8,3 +10,5 @@
         public bool IsStale { get; set; }
     }
 }
+
+

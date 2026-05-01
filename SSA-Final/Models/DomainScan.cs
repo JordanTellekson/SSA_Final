@@ -1,4 +1,6 @@
-﻿namespace SSA_Final.Models
+// Aggregate model representing one scan run and all generated variant results.
+
+namespace SSA_Final.Models
 {
     public class DomainScan
     {
@@ -11,3 +13,4 @@
         public List<DomainAnalysisResult> Variants { get; set; } = new();
     }
 }
+
