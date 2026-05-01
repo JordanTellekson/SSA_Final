@@ -45,7 +45,7 @@ namespace SSA_Final.Services
         {
             _logger.LogInformation("ScanBackgroundService started.");
 
-            // On startup, drain any scans left in Pending state (crash/restart recovery).
+            // On startup, recover any scans left in Pending or InProgress (crash/restart recovery).
             // Wrapped in a try/catch so a transient DB error at startup does not crash the host.
             try
             {
@@ -62,7 +62,16 @@ namespace SSA_Final.Services
             await foreach (var scanId in _channelReader.ReadAllAsync(stoppingToken))
             {
                 // Fire and forget per scan so concurrent scans do not block each other.
-                _ = Task.Run(() => ProcessScanAsync(scanId, stoppingToken), stoppingToken);
+                // The ContinueWith acts as a safety net: if ProcessScanAsync ever throws
+                // despite its internal catch blocks, the failure is logged rather than
+                // silently swallowed by the GC.
+                _ = Task.Run(() => ProcessScanAsync(scanId, stoppingToken), stoppingToken)
+                    .ContinueWith(
+                        t => _logger.LogError(
+                            t.Exception,
+                            "Scan {DomainScanId}: unhandled exception escaped ProcessScanAsync.",
+                            scanId),
+                        TaskContinuationOptions.OnlyOnFaulted);
             }
 
             _logger.LogInformation("ScanBackgroundService stopped.");
@@ -72,6 +81,23 @@ namespace SSA_Final.Services
         {
             using var scope = _scopeFactory.CreateScope();
             var scanStore = scope.ServiceProvider.GetRequiredService<IScanStore>();
+
+            // Reset any scans left InProgress from a previous run (e.g. crash mid-flight)
+            // back to Pending so they are picked up and processed again below.
+            var inProgressScans = scanStore.GetInProgressScans();
+            if (inProgressScans.Count > 0)
+            {
+                _logger.LogWarning(
+                    "ScanBackgroundService: found {Count} scan(s) stuck in InProgress on startup — resetting to Pending.",
+                    inProgressScans.Count);
+
+                foreach (var stuck in inProgressScans)
+                {
+                    stuck.Status = DomainScanStatus.Pending;
+                    scanStore.Update(stuck);
+                }
+            }
+
             var pendingScans = scanStore.GetPendingScans();
 
             if (pendingScans.Count == 0)
@@ -86,7 +112,14 @@ namespace SSA_Final.Services
 
             foreach (var scan in pendingScans)
             {
-                _ = Task.Run(() => ProcessScanAsync(scan.Id, stoppingToken), stoppingToken);
+                // Same safety-net ContinueWith as the main loop.
+                _ = Task.Run(() => ProcessScanAsync(scan.Id, stoppingToken), stoppingToken)
+                    .ContinueWith(
+                        t => _logger.LogError(
+                            t.Exception,
+                            "Scan {DomainScanId}: unhandled exception escaped ProcessScanAsync during startup drain.",
+                            scan.Id),
+                        TaskContinuationOptions.OnlyOnFaulted);
             }
         }
 
