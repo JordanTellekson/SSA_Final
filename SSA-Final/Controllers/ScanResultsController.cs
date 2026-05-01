@@ -61,6 +61,13 @@ namespace SSA_Final.Controllers
                 return NotFound();
             }
 
+            foreach (var variant in scan.Variants)
+            {
+                variant.DiscoveredDomain ??= string.Empty;
+                variant.Summary ??= string.Empty;
+                variant.Indicators ??= new List<string>();
+            }
+
             return View(scan);
         }
 

@@ -7,6 +7,10 @@ namespace SSA_Final.Interfaces
     public interface IDomainAnalyzer
     {
         Task<DomainAnalysisResult> Analyze(string domain);
+
+        bool IsKnownActiveDomain(string? domainInput);
+
+        Task<DomainAnalysisResult> AnalyzeDomainRiskAsync(string? domainInput);
     }
 }
 
