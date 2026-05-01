@@ -1,4 +1,7 @@
-﻿namespace SSA_Final.Models
+// File: ScanQuery.cs
+// Purpose: Defines project behavior and data flow for phishing-domain analysis and reporting.
+
+namespace SSA_Final.Models
 {
     public class ScanQuery
     {

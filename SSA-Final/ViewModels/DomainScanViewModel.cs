@@ -1,4 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+// File: DomainScanViewModel.cs
+// Purpose: Defines project behavior and data flow for phishing-domain analysis and reporting.
+
+using System.ComponentModel.DataAnnotations;
 
 namespace SSA_Final.ViewModels
 {

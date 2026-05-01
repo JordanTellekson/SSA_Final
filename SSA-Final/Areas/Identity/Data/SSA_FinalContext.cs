@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Identity;
+// File: SSA_FinalContext.cs
+// Purpose: Defines project behavior and data flow for phishing-domain analysis and reporting.
+
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SSA_Final.Models;
