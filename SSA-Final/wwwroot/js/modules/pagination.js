@@ -15,7 +15,7 @@ export function initPagination() {
         setPage(url, page);
 
         // All existing params (query, Status, HasMalicious) are preserved
-        // because we build from the current URL via getUrl().
+        // by building from the current URL via getUrl().
         fetch(buildUrl(url), {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })

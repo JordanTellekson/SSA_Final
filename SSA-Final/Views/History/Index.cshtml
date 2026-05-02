@@ -31,5 +31,9 @@ else
 }
 
 @section Scripts {
+    <script>
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+        const tooltipList = [...tooltipTriggerList].map(el => new bootstrap.Tooltip(el))
+    </script>
     <script type="module" src="~/js/resultsViewControls.js"></script>
 }

@@ -20,7 +20,7 @@ namespace SSA_Final.Controllers
 
         public async Task<IActionResult> Index([FromQuery] ScanQuery scanQuery)
         {
-            _logger.LogInformation("History page loaded at {Time}", DateTime.UtcNow);
+            _logger.LogInformation("History index view loaded at {Time}", DateTime.UtcNow);
 
             if (!string.IsNullOrWhiteSpace(scanQuery.Query))
             {
@@ -29,9 +29,6 @@ namespace SSA_Final.Controllers
 
             var result = await _scanStore.GetPagedAsync(scanQuery);
             var hasAnyScans = await _scanStore.GetAnyAsync();
-
-            ViewData["Status"] = scanQuery.Status;
-            ViewData["HasMalicious"] = scanQuery.HasMalicious;
             
             var vm = new PagedResultViewModel<DomainScan>
             {

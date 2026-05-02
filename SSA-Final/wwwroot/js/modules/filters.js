@@ -5,7 +5,7 @@ export function initFilters() {
     const clearBtn = document.getElementById('clearFiltersBtn');
     const resetBtn = document.getElementById('resetBtn');
 
-    // Apply filters — merge form values into current URL, preserving query
+    // Apply filters by merging form values into the current URL, preserving the search query
     filterForm?.addEventListener('submit', (e) => {
         e.preventDefault();
 
@@ -17,11 +17,11 @@ export function initFilters() {
         setParam(url, 'HasMalicious', data.get('HasMalicious'));
         setPage(url, 1);
 
-        // query is already in the URL from the address bar
+        // Query is already in the URL from the address bar
         navigate(url);
     });
 
-    // Clear filter params only — query stays untouched in the URL
+    // Clear filter params only, search query stays untouched in the URL
     clearBtn?.addEventListener('click', (e) => {
         e.preventDefault();
         const url = getUrl();
