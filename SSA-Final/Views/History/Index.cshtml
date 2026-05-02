@@ -26,21 +26,10 @@
 else
 {
     <div id="resultsContainer">
-        @if (!Model.Result.Items.Any())
-        {
-            <p>Sorry, we couldn't find any matching results.</p>
-        }
-        else
-        {
-            @await Html.PartialAsync("_ScanList", Model)
-        }
+        @await Html.PartialAsync("_ScanList", Model)
     </div>
 }
 
 @section Scripts {
-    <script>
-        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
-        const tooltipList = [...tooltipTriggerList].map(el => new bootstrap.Tooltip(el))
-    </script>
-    <script src="~/js/search.js"></script>
+    <script type="module" src="~/js/resultsViewControls.js"></script>
 }
