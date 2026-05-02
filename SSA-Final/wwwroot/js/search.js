@@ -24,8 +24,7 @@
 
     if (resetBtn) {
         resetBtn.addEventListener('click', function () {
-            input.value = '';
-            performSearch('', 1);
+            window.location.href = window.location.pathname
         });
     }
 
