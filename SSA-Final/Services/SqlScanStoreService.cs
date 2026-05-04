@@ -1,4 +1,5 @@
-﻿using SSA_Final.Interfaces;
+using SSA_Final.Exceptions;
+using SSA_Final.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using SSA_Final.Data;
 using SSA_Final.Models;
@@ -9,52 +10,115 @@ namespace SSA_Final.Services
     {
         private readonly SSA_FinalContext _dbContext;
         private readonly ISearchService _searchService;
+        private readonly ILogger<SqlScanStoreService> _logger;
 
-        public SqlScanStoreService(SSA_FinalContext dbContext, ISearchService searchService)
+        public SqlScanStoreService(
+            SSA_FinalContext dbContext,
+            ISearchService searchService,
+            ILogger<SqlScanStoreService> logger)
         {
             _dbContext = dbContext;
             _searchService = searchService;
+            _logger = logger;
         }
 
         public void Add(DomainScan scan)
         {
-            _dbContext.Add(scan);
-            _dbContext.SaveChanges();
+            try
+            {
+                _dbContext.Add(scan);
+                _dbContext.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ScanStore: failed to add scan {ScanId} for domain '{Domain}'.",
+                    scan.Id, scan.BaseDomain);
+                throw new ScanStoreException(
+                    $"Failed to persist new scan {scan.Id} for domain '{scan.BaseDomain}'.", ex);
+            }
         }
 
         public void Update(DomainScan scan)
         {
-            foreach (var variant in scan.Variants)
+            try
             {
-                if (_dbContext.Entry(variant).State == EntityState.Detached)
+                foreach (var variant in scan.Variants)
                 {
-                    _dbContext.DomainAnalysisResults.Add(variant);
+                    if (_dbContext.Entry(variant).State == EntityState.Detached)
+                    {
+                        _dbContext.DomainAnalysisResults.Add(variant);
+                    }
                 }
-            }
 
-            _dbContext.SaveChanges();
+                _dbContext.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ScanStore: failed to update scan {ScanId}.", scan.Id);
+                throw new ScanStoreException(
+                    $"Failed to update scan {scan.Id}.", ex);
+            }
         }
 
         public List<DomainScan> GetAll()
         {
-            return _dbContext.DomainScans
-                .Include(x => x.Variants)
-                .OrderByDescending(x => x.CreatedAt)
-                .ToList();
+            try
+            {
+                return _dbContext.DomainScans
+                    .Include(x => x.Variants)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ScanStore: failed to retrieve all scans.");
+                throw new ScanStoreException("Failed to retrieve all scans.", ex);
+            }
         }
 
         public DomainScan? GetById(Guid id)
         {
-            return _dbContext.DomainScans
-                .Include(x => x.Variants)
-                .FirstOrDefault(x => x.Id == id);
+            try
+            {
+                return _dbContext.DomainScans
+                    .Include(x => x.Variants)
+                    .FirstOrDefault(x => x.Id == id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ScanStore: failed to retrieve scan {ScanId}.", id);
+                throw new ScanStoreException($"Failed to retrieve scan {id}.", ex);
+            }
         }
 
         public List<DomainScan> GetPendingScans()
         {
-            return _dbContext.DomainScans
-                .Where(x => x.Status == DomainScanStatus.Pending)
-                .ToList();
+            try
+            {
+                return _dbContext.DomainScans
+                    .Where(x => x.Status == DomainScanStatus.Pending)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ScanStore: failed to retrieve pending scans.");
+                throw new ScanStoreException("Failed to retrieve pending scans.", ex);
+            }
+        }
+
+        public List<DomainScan> GetInProgressScans()
+        {
+            try
+            {
+                return _dbContext.DomainScans
+                    .Where(x => x.Status == DomainScanStatus.InProgress)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ScanStore: failed to retrieve in-progress scans.");
+                throw new ScanStoreException("Failed to retrieve in-progress scans.", ex);
+            }
         }
 
         public async Task<bool> GetAnyAsync()

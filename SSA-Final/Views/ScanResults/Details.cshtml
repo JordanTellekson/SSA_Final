@@ -53,6 +53,25 @@
         <p class="text-muted mt-2" style="font-size: 0.85rem;">This page will update automatically when the scan completes.</p>
     </div>
 }
+else if (Model.Status == DomainScanStatus.Failed)
+{
+    <div class="alert alert-danger d-flex align-items-start gap-3 my-4" role="alert">
+        <span class="fs-4" aria-hidden="true">&#9888;</span>
+        <div>
+            <h5 class="alert-heading mb-1">Scan failed</h5>
+            <p class="mb-1">
+                An error occurred while processing this scan and it could not be completed.
+                Please try submitting the scan again. If the problem persists, contact your administrator and provide the Scan ID below.
+            </p>
+            @if (Model.TimeFinished.HasValue)
+            {
+                <p class="mb-0 text-muted" style="font-size: 0.875rem;">
+                    Failure recorded at @Model.TimeFinished.Value.ToLocalTime().ToString("f")
+                </p>
+            }
+        </div>
+    </div>
+}
 else if (!Model.Variants.Any())
 {
     <p>No variants were generated for this domain.</p>

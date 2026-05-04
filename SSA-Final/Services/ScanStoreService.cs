@@ -46,6 +46,11 @@ namespace SSA_Final.Services
             lock (_lock) { return _scans.Where(s => s.Status == DomainScanStatus.Pending).ToList(); }
         }
 
+        public List<DomainScan> GetInProgressScans()
+        {
+            lock (_lock) { return _scans.Where(s => s.Status == DomainScanStatus.InProgress).ToList(); }
+        }
+
         public Task<bool> GetAnyAsync()
         {
             lock (_lock) { return Task.FromResult(_scans.Count == 0); }
