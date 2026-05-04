@@ -34,6 +34,7 @@ namespace SSA_Final.Controllers
             {
                 Result = result,
                 Query = scanQuery.Query,
+                Filters = scanQuery,
                 ViewType = "table",
                 HasAnyScans = hasAnyScans
             };

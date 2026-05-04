@@ -11,10 +11,7 @@
 <h1>Scan Results</h1>
 
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-    @await Html.PartialAsync("_Filters", new ScanQuery
-    {
-        Query = Model.Query
-    })
+    @await Html.PartialAsync("_Filters", Model.Filters)
 
     @await Html.PartialAsync("_SearchBar", Model.Query)
 </div>

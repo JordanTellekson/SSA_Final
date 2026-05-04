@@ -9,5 +9,6 @@ namespace SSA_Final.ViewModels
         public string? Query { get; set; }
         public string ViewType { get; set; } = "table";
         public bool HasAnyScans { get; set; }
+        public ScanQuery Filters { get; set; } = new();
     }
 }
