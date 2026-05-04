@@ -11,10 +11,7 @@
 <h1>Scan Results</h1>
 
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-    @await Html.PartialAsync("_Filters", new ScanQuery
-    {
-        Query = Model.Query
-    })
+    @await Html.PartialAsync("_Filters", Model.Filters)
 
     @await Html.PartialAsync("_SearchBar", Model.Query)
 </div>
@@ -26,17 +23,10 @@
 else
 {
     <div id="resultsContainer">
-        @if (!Model.Result.Items.Any())
-        {
-            <p>Sorry, we couldn't find any matching results.</p>
-        }
-        else
-        {
-            @await Html.PartialAsync("_ScanList", Model)
-        }
+        @await Html.PartialAsync("_ScanList", Model)
     </div>
 }
 
 @section Scripts {
-    <script src="~/js/search.js"></script>
+    <script type="module" src="~/js/resultsViewControls.js"></script>
 }

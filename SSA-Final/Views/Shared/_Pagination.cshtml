@@ -1,10 +1,6 @@
-﻿@model SSA_Final.Interfaces.IPagedResult<DomainScan>
-
-@{
-    var query = ViewData["Query"]?.ToString();
-    var status = ViewData["Status"];
-    var hasMalicious = ViewData["HasMalicious"];
-}
+﻿@using SSA_Final.Models
+@using SSA_Final.Interfaces
+@model IPagedResult<DomainScan>
 
 @if (Model.TotalPages > 1)
 {

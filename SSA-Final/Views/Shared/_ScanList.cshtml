@@ -1,7 +1,11 @@
 ﻿@using SSA_Final.ViewModels
 @model PagedResultViewModel<DomainScan>
 
-@if (Model.ViewType == "history")
+@if (!Model.Result.Items.Any())
+{
+    <p>Sorry, we couldn't find any matching results.</p>
+}
+else if (Model.ViewType == "history")
 {
     <ul class="list-group">
         @foreach (var scan in Model.Result.Items)
