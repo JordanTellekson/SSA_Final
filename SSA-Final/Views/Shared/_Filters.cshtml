@@ -8,7 +8,7 @@
 <div class="modal fade" id="filterModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="get">
+            <form id="filterForm">
                 <div class="modal-header">
                     <h5 class="modal-title">Filters</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -38,14 +38,11 @@
                         </select>
                     </div>
 
-                    <!-- Preserve search -->
-                    <input type="hidden" name="Query" value="@Model.Query" />
-
                 </div>
 
                 <div class="modal-footer">
                     <button type="submit" class="btn btn-primary">Apply</button>
-                    <a href="?" class="btn btn-secondary">Clear</a>
+                    <a id="clearFiltersBtn" class="btn btn-secondary">Clear Filters</a>
                 </div>
             </form>
         </div>
