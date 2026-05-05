@@ -104,7 +104,7 @@ namespace SSA_Final.Services
                     return riskResult;
                 }
 
-                AddRiskIndicators(riskResult, indicators);
+                AddRiskIndicators(domain, riskResult, indicators);
 
                 // Passes 1–3 — Network checks (redirect, SSL, HTML content)
                 await RunNetworkChecksAsync(domain, indicators);
@@ -159,6 +159,10 @@ namespace SSA_Final.Services
                     return BuildInvalidInputResult();
                 }
 
+                _logger.LogInformation(
+                    "[DomainAnalyzerService] Structural risk analysis started for {Domain}.",
+                    normalizedInput);
+
                 if (_activeDomains.Value.Contains(normalizedInput))
                 {
                     return BuildKnownActiveDomainResult(normalizedInput);
@@ -199,11 +203,52 @@ namespace SSA_Final.Services
                 }
 
                 var typosquatting = CalculateTyposquattingScore(normalizedInput);
+                _logger.LogDebug(
+                    "[DomainAnalyzerService] Signal calculated for {Domain}: {Signal} Score={Score} Triggered={Triggered} Detail={Detail}",
+                    normalizedInput,
+                    typosquatting.Signal,
+                    typosquatting.Score,
+                    typosquatting.Triggered,
+                    typosquatting.Detail);
+
                 var subdomain = CalculateSubdomainScore(normalizedInput);
+                _logger.LogDebug(
+                    "[DomainAnalyzerService] Signal calculated for {Domain}: {Signal} Score={Score} Triggered={Triggered} Detail={Detail}",
+                    normalizedInput,
+                    subdomain.Signal,
+                    subdomain.Score,
+                    subdomain.Triggered,
+                    subdomain.Detail);
+
                 var hyphen = CalculateHyphenScore(normalizedInput);
+                _logger.LogDebug(
+                    "[DomainAnalyzerService] Signal calculated for {Domain}: {Signal} Score={Score} Triggered={Triggered} Detail={Detail}",
+                    normalizedInput,
+                    hyphen.Signal,
+                    hyphen.Score,
+                    hyphen.Triggered,
+                    hyphen.Detail);
+
                 var entropy = CalculateEntropyScore(normalizedInput);
+                _logger.LogDebug(
+                    "[DomainAnalyzerService] Signal calculated for {Domain}: {Signal} Score={Score} Triggered={Triggered} Detail={Detail}",
+                    normalizedInput,
+                    entropy.Signal,
+                    entropy.Score,
+                    entropy.Triggered,
+                    entropy.Detail);
 
                 var overallRisk = typosquatting.Score + subdomain.Score + hyphen.Score + entropy.Score;
+                var triggeredSignals = new[] { typosquatting, subdomain, hyphen, entropy }
+                    .Where(signal => signal.Triggered)
+                    .Select(signal => signal.Signal)
+                    .ToArray();
+
+                _logger.LogInformation(
+                    "[DomainAnalyzerService] Structural risk analysis completed for {Domain}. OverallRiskScore={Score} TriggeredSignals={TriggeredSignals}",
+                    normalizedInput,
+                    overallRisk,
+                    triggeredSignals);
 
                 if (blocklistResult.IsStale)
                 {
@@ -258,7 +303,7 @@ namespace SSA_Final.Services
 
         // ── Pass 0: Structural risk checks ────────────────────────────────────
 
-        private static void AddRiskIndicators(DomainAnalysisResult riskResult, List<string> indicators)
+        private void AddRiskIndicators(string domain, DomainAnalysisResult riskResult, List<string> indicators)
         {
             var signals = new[]
             {
@@ -272,13 +317,25 @@ namespace SSA_Final.Services
             {
                 if (signal is not null && signal.Triggered)
                 {
-                    indicators.Add($"{signal.Signal}: {signal.Detail}");
+                    var indicator = $"{signal.Signal}: {signal.Detail}";
+                    indicators.Add(indicator);
+                    _logger.LogDebug(
+                        "[DomainAnalyzerService] Static indicator added for {Domain}: {Signal} Indicator={Indicator}",
+                        domain,
+                        signal.Signal,
+                        indicator);
                 }
             }
 
             if (riskResult.IsBlocklistMatch)
             {
-                indicators.Add($"Blocklist Match: Domain found in {riskResult.BlocklistSource} feed.");
+                var indicator = $"Blocklist Match: Domain found in {riskResult.BlocklistSource} feed.";
+                indicators.Add(indicator);
+                _logger.LogDebug(
+                    "[DomainAnalyzerService] Static indicator added for {Domain}: {Signal} Indicator={Indicator}",
+                    domain,
+                    "Blocklist Match",
+                    indicator);
             }
         }
 
@@ -667,6 +724,10 @@ namespace SSA_Final.Services
                         !targetHost.EndsWith($".{domain}", StringComparison.OrdinalIgnoreCase))
                     {
                         indicators.Add($"Cross-domain redirect detected -> {targetHost}");
+                        _logger.LogInformation(
+                            "[DomainAnalyzerService] Cross-domain redirect detected for {Domain} -> {RedirectTarget}",
+                            domain,
+                            targetHost);
                     }
                 }
             }

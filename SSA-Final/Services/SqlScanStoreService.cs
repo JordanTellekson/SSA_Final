@@ -12,21 +12,36 @@ namespace SSA_Final.Services
     {
         private readonly SSA_FinalContext _dbContext;
         private readonly ISearchService _searchService;
+        private readonly ILogger<SqlScanStoreService> _logger;
 
-        public SqlScanStoreService(SSA_FinalContext dbContext, ISearchService searchService)
+        public SqlScanStoreService(
+            SSA_FinalContext dbContext,
+            ISearchService searchService,
+            ILogger<SqlScanStoreService> logger)
         {
             _dbContext = dbContext;
             _searchService = searchService;
+            _logger = logger;
         }
 
         public void Add(DomainScan scan)
         {
+            _logger.LogDebug(
+                "[SqlScanStoreService] Adding scan {ScanId} for {BaseDomain} with status {Status}.",
+                scan.Id,
+                scan.BaseDomain,
+                scan.Status);
             _dbContext.Add(scan);
             _dbContext.SaveChanges();
         }
 
         public void Update(DomainScan scan)
         {
+            _logger.LogDebug(
+                "[SqlScanStoreService] Updating scan {ScanId} with status {Status}. VariantCount={VariantCount}",
+                scan.Id,
+                scan.Status,
+                scan.Variants?.Count ?? 0);
             foreach (var variant in scan.Variants)
             {
                 if (_dbContext.Entry(variant).State == EntityState.Detached)
@@ -40,6 +55,7 @@ namespace SSA_Final.Services
 
         public List<DomainScan> GetAll()
         {
+            _logger.LogDebug("[SqlScanStoreService] Retrieving all scans.");
             return _dbContext.DomainScans
                 .Include(x => x.Variants)
                 .OrderByDescending(x => x.CreatedAt)
@@ -48,6 +64,7 @@ namespace SSA_Final.Services
 
         public DomainScan? GetById(Guid id)
         {
+            _logger.LogDebug("[SqlScanStoreService] Retrieving scan by id {ScanId}.", id);
             return _dbContext.DomainScans
                 .Include(x => x.Variants)
                 .FirstOrDefault(x => x.Id == id);
@@ -55,6 +72,7 @@ namespace SSA_Final.Services
 
         public List<DomainScan> GetPendingScans()
         {
+            _logger.LogDebug("[SqlScanStoreService] Retrieving pending scans.");
             return _dbContext.DomainScans
                 .Where(x => x.Status == DomainScanStatus.Pending)
                 .ToList();
@@ -62,11 +80,19 @@ namespace SSA_Final.Services
 
         public async Task<bool> GetAnyAsync()
         {
+            _logger.LogDebug("[SqlScanStoreService] Checking whether any scan records exist.");
             return await _dbContext.DomainScans.AnyAsync();
         }
 
         public async Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
         {
+            _logger.LogDebug(
+                "[SqlScanStoreService] Retrieving paged scans. Page={Page} PageSize={PageSize} Status={Status} HasMalicious={HasMalicious} Query={Query}",
+                query.Page,
+                query.PageSize,
+                query.Status,
+                query.HasMalicious,
+                query.Query);
             query.Page = Math.Max(1, query.Page);
             query.PageSize = Math.Clamp(query.PageSize, 1, 100);
 
@@ -134,6 +160,10 @@ namespace SSA_Final.Services
             Guid scanId,
             VariantQuery query)
         {
+            _logger.LogDebug(
+                "[SqlScanStoreService] Retrieving variants for scan {ScanId}. Query={Query}",
+                scanId,
+                query.Query);
             query.Query = string.IsNullOrWhiteSpace(query.Query)
                 ? null
                 : query.Query.Trim();

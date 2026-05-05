@@ -57,22 +57,46 @@ namespace SSA_Final.Services
                 if (cert is null)
                 {
                     indicators.Add("SSL certificate could not be retrieved");
+                    _logger.LogWarning(
+                        "[SslCertificateChecker] SSL indicator added for {Domain}: {Indicator}",
+                        domain,
+                        "SSL certificate could not be retrieved");
                     return indicators;
                 }
 
                 // Expired certificate
                 if (cert.NotAfter < DateTime.UtcNow)
+                {
                     indicators.Add($"SSL certificate expired on {cert.NotAfter:yyyy-MM-dd}");
+                    _logger.LogWarning(
+                        "[SslCertificateChecker] SSL indicator added for {Domain}: {Indicator} NotAfter={NotAfter}",
+                        domain,
+                        "ExpiredCertificate",
+                        cert.NotAfter);
+                }
 
                 // Self-signed certificate (issuer equals subject)
                 if (cert.Issuer.Equals(cert.Subject, StringComparison.OrdinalIgnoreCase))
+                {
                     indicators.Add("Self-signed SSL certificate detected");
+                    _logger.LogWarning(
+                        "[SslCertificateChecker] SSL indicator added for {Domain}: {Indicator} Issuer={Issuer} Subject={Subject}",
+                        domain,
+                        "SelfSignedCertificate",
+                        cert.Issuer,
+                        cert.Subject);
+                }
 
                 // Hostname mismatch
                 if (!CertMatchesDomain(cert, domain))
                 {
                     var cn = cert.GetNameInfo(X509NameType.SimpleName, false);
                     indicators.Add($"SSL certificate hostname mismatch (cert issued for '{cn}')");
+                    _logger.LogWarning(
+                        "[SslCertificateChecker] SSL indicator added for {Domain}: {Indicator} CertificateHost={CertificateHost}",
+                        domain,
+                        "HostnameMismatch",
+                        cn);
                 }
             }
             catch (SocketException)

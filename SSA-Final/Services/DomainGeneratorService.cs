@@ -1,4 +1,4 @@
-// Variation generator service that creates basic domain permutations for scanning.
+﻿// Variation generator service that creates basic domain permutations for scanning.
 // This implementation is intentionally simple and can be replaced with richer logic.
 
 using SSA_Final.Interfaces;
@@ -11,7 +11,8 @@ namespace SSA_Final.Services
         private const int MaxAddedSubdomains = 4;
         private const int MaxAddedHyphens = 6;
         private const int MaxHyphenVariantsPerDomain = 3000;
-        private static readonly string[] CommonTlds = ["com", "net", "org", "co", "io"];
+        private static readonly string[] CommonTlds = ["com", "net", "org", "co", "io", "xyz", "top", "tk", "ru", "pw", "cc",
+                "buzz", "gq", "ml", "cf", "ga", "info", "biz", "online", "site", "club", "vip", "shop", "website"];
         private static readonly string[] SubdomainPrefixes = ["secure", "login", "account", "verify", "blog"];
 
         // QWERTY-adjacent keys for likely typo substitutions.
