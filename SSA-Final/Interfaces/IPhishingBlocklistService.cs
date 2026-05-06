@@ -1,4 +1,6 @@
-﻿using SSA_Final.Models;
+// Contract for phishing feed lookup operations against normalized domains.
+
+using SSA_Final.Models;
 
 namespace SSA_Final.Interfaces
 {
@@ -7,3 +9,5 @@ namespace SSA_Final.Interfaces
         Task<BlocklistCheckResult> CheckAsync(string domain);
     }
 }
+
+

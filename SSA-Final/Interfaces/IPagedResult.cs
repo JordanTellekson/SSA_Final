@@ -1,4 +1,7 @@
-﻿namespace SSA_Final.Interfaces
+// File: IPagedResult.cs
+// Purpose: Defines project behavior and data flow for phishing-domain analysis and reporting.
+
+namespace SSA_Final.Interfaces
 {
     public interface IPagedResult<T> : IPagedResult
     {

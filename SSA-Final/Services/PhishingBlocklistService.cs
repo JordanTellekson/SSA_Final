@@ -1,4 +1,7 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+// Service that fetches and caches phishing domains from OpenPhish.
+// Normalizes entries to hostnames and supports resilient fallback behavior.
+
+using Microsoft.Extensions.Caching.Memory;
 using SSA_Final.Interfaces;
 using SSA_Final.Models;
 
@@ -108,3 +111,4 @@ namespace SSA_Final.Services
         }
     }
 }
+

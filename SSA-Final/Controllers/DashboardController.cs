@@ -1,3 +1,6 @@
+// MVC controller for launching new domain scans from the dashboard UI.
+// Coordinates variant generation, analysis execution, lifecycle updates, and navigation.
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;

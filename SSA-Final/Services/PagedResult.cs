@@ -1,4 +1,7 @@
-﻿using SSA_Final.Interfaces;
+// File: PagedResult.cs
+// Purpose: Defines project behavior and data flow for phishing-domain analysis and reporting.
+
+using SSA_Final.Interfaces;
 
 namespace SSA_Final.Services
 {

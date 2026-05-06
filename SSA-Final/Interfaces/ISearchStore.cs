@@ -1,4 +1,7 @@
-﻿using Microsoft.CodeAnalysis.Elfie.Diagnostics;
+// File: ISearchStore.cs
+// Purpose: Defines project behavior and data flow for phishing-domain analysis and reporting.
+
+using Microsoft.CodeAnalysis.Elfie.Diagnostics;
 using SSA_Final.Models;
 
 namespace SSA_Final.Interfaces

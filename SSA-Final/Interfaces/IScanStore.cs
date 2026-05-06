@@ -1,4 +1,6 @@
-﻿using SSA_Final.Models;
+// Contract for storing and querying domain scan lifecycle records.
+
+using SSA_Final.Models;
 
 namespace SSA_Final.Interfaces
 {
@@ -17,3 +19,4 @@ namespace SSA_Final.Interfaces
             VariantQuery query);
     }
 }
+

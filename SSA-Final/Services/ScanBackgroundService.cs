@@ -1,3 +1,6 @@
+// File: ScanBackgroundService.cs
+// Purpose: Defines project behavior and data flow for phishing-domain analysis and reporting.
+
 using Polly;
 using Polly.Retry;
 using SSA_Final.Interfaces;

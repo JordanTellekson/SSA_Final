@@ -1,4 +1,7 @@
-﻿using SSA_Final.Interfaces;
+// File: PagedResultViewModel.cs
+// Purpose: Defines project behavior and data flow for phishing-domain analysis and reporting.
+
+using SSA_Final.Interfaces;
 using SSA_Final.Models;
 
 namespace SSA_Final.ViewModels
