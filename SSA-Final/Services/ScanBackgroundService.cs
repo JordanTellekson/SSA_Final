@@ -15,6 +15,9 @@ namespace SSA_Final.Services
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<ScanBackgroundService> _logger;
 
+        // Minimum pause between consecutive variant analyses to avoid hammering external services.
+        private readonly int _perVariantDelayMs;
+
         // Retry pipeline: up to 2 retries on HttpRequestException with exponential backoff (2s, 4s).
         private readonly ResiliencePipeline _retryPipeline = new ResiliencePipelineBuilder()
             .AddRetry(new RetryStrategyOptions
@@ -37,11 +40,13 @@ namespace SSA_Final.Services
         public ScanBackgroundService(
             ChannelReader<Guid> channelReader,
             IServiceScopeFactory scopeFactory,
-            ILogger<ScanBackgroundService> logger)
+            ILogger<ScanBackgroundService> logger,
+            IConfiguration configuration)
         {
             _channelReader = channelReader;
             _scopeFactory = scopeFactory;
             _logger = logger;
+            _perVariantDelayMs = configuration.GetValue<int>("ScanWorker:PerVariantDelayMs", 150);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -169,16 +174,23 @@ namespace SSA_Final.Services
                     }
                     catch (HttpRequestException ex)
                     {
-                        // All retries exhausted for this variant — log and mark the whole scan failed.
-                        _logger.LogError(
+                        // All retries exhausted for this variant — log and skip rather than
+                        // failing the entire scan over a single unresolvable domain.
+                        _logger.LogWarning(
                             ex,
-                            "Scan {DomainScanId}: variant '{Variant}' failed after all retries.",
+                            "Scan {DomainScanId}: variant '{Variant}' skipped after all retries exhausted.",
                             scanId, variant);
-                        throw;
+                        continue;
                     }
 
                     result.DomainScanId = scanId;
                     analysisResults.Add(result);
+
+                    // Throttle between variant analyses to avoid overwhelming external services.
+                    if (_perVariantDelayMs > 0)
+                    {
+                        await Task.Delay(_perVariantDelayMs, stoppingToken);
+                    }
                 }
 
                 scan.Variants = analysisResults;

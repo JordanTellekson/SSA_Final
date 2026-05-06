@@ -59,6 +59,12 @@ namespace SSA_Final.Models
         public DomainRiskSignalScore? ShannonEntropy { get; set; }
 
         [NotMapped]
+        public DomainRiskSignalScore? RepeatedSegment { get; set; }
+
+        [NotMapped]
+        public DomainRiskSignalScore? KeywordAbuse { get; set; }
+
+        [NotMapped]
         public bool IsBlocklistMatch { get; set; }
 
         [NotMapped]

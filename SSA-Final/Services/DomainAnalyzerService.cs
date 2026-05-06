@@ -30,6 +30,13 @@ namespace SSA_Final.Services
             "bankofamerica", "instagram", "twitter"
         };
 
+        // Keywords commonly embedded in phishing domains to impersonate legitimate services.
+        private static readonly string[] PhishingKeywords =
+        [
+            "login", "secure", "account", "verify", "update",
+            "confirm", "signin", "password", "support"
+        ];
+
         // ── Constructor ───────────────────────────────────────────────────────
 
         public DomainAnalyzerService(
@@ -79,7 +86,7 @@ namespace SSA_Final.Services
         {
             try
             {
-                // Normalize input: trim and extract host if the caller passed a full URL
+                // Normalize input: trim and extract host if the caller passed a full URL.
                 domain = domain?.Trim() ?? string.Empty;
                 if (Uri.TryCreate(domain, UriKind.Absolute, out var parsed))
                 {
@@ -99,7 +106,7 @@ namespace SSA_Final.Services
 
                 var indicators = new List<string>();
 
-                // Pass 0 — Structural risk checks (and blocklist / allow-list checks)
+                // Pass 0 — Structural risk checks (and blocklist / allow-list checks).
                 var riskResult = await AnalyzeDomainRiskAsync(domain);
                 if (!riskResult.IsValidDomain)
                 {
@@ -113,7 +120,7 @@ namespace SSA_Final.Services
 
                 AddRiskIndicators(domain, riskResult, indicators);
 
-                // Passes 1–3 — Network checks (redirect, SSL, HTML content)
+                // Passes 1–3 — Network checks (redirect, SSL, HTML content).
                 await RunNetworkChecksAsync(domain, indicators);
 
                 riskResult.Indicators = indicators;
@@ -183,11 +190,13 @@ namespace SSA_Final.Services
                         normalizedInput,
                         blocklistResult.Source);
 
-                    var signal = new DomainRiskSignalScore(
+                    var blocklistSignal = new DomainRiskSignalScore(
                         "Blocklist Match",
                         100,
                         true,
                         $"Domain found in {blocklistResult.Source} feed.");
+
+                    var emptySignal = new DomainRiskSignalScore("N/A", 0, false, "Domain matched phishing blocklist.");
 
                     return new DomainAnalysisResult
                     {
@@ -196,10 +205,12 @@ namespace SSA_Final.Services
                         IsKnownActiveDomain = false,
                         IsValidDomain = true,
                         OverallRiskScore = 100,
-                        TyposquattingEditDistance = signal,
-                        ExcessiveSubdomains = signal,
-                        HyphenAbuse = signal,
-                        ShannonEntropy = signal,
+                        TyposquattingEditDistance = blocklistSignal,
+                        ExcessiveSubdomains = blocklistSignal,
+                        HyphenAbuse = blocklistSignal,
+                        ShannonEntropy = blocklistSignal,
+                        RepeatedSegment = emptySignal,
+                        KeywordAbuse = emptySignal,
                         IsBlocklistMatch = true,
                         BlocklistSource = blocklistResult.Source,
                         UsedBlocklistFallback = blocklistResult.IsStale,
@@ -210,43 +221,28 @@ namespace SSA_Final.Services
                 }
 
                 var typosquatting = CalculateTyposquattingScore(normalizedInput);
-                _logger.LogDebug(
-                    "[DomainAnalyzerService] Signal calculated for {Domain}: {Signal} Score={Score} Triggered={Triggered} Detail={Detail}",
-                    normalizedInput,
-                    typosquatting.Signal,
-                    typosquatting.Score,
-                    typosquatting.Triggered,
-                    typosquatting.Detail);
+                LogSignal(normalizedInput, typosquatting);
 
                 var subdomain = CalculateSubdomainScore(normalizedInput);
-                _logger.LogDebug(
-                    "[DomainAnalyzerService] Signal calculated for {Domain}: {Signal} Score={Score} Triggered={Triggered} Detail={Detail}",
-                    normalizedInput,
-                    subdomain.Signal,
-                    subdomain.Score,
-                    subdomain.Triggered,
-                    subdomain.Detail);
+                LogSignal(normalizedInput, subdomain);
 
                 var hyphen = CalculateHyphenScore(normalizedInput);
-                _logger.LogDebug(
-                    "[DomainAnalyzerService] Signal calculated for {Domain}: {Signal} Score={Score} Triggered={Triggered} Detail={Detail}",
-                    normalizedInput,
-                    hyphen.Signal,
-                    hyphen.Score,
-                    hyphen.Triggered,
-                    hyphen.Detail);
+                LogSignal(normalizedInput, hyphen);
 
                 var entropy = CalculateEntropyScore(normalizedInput);
-                _logger.LogDebug(
-                    "[DomainAnalyzerService] Signal calculated for {Domain}: {Signal} Score={Score} Triggered={Triggered} Detail={Detail}",
-                    normalizedInput,
-                    entropy.Signal,
-                    entropy.Score,
-                    entropy.Triggered,
-                    entropy.Detail);
+                LogSignal(normalizedInput, entropy);
 
-                var overallRisk = typosquatting.Score + subdomain.Score + hyphen.Score + entropy.Score;
-                var triggeredSignals = new[] { typosquatting, subdomain, hyphen, entropy }
+                var repeatedSegment = CalculateRepeatedSegmentScore(normalizedInput);
+                LogSignal(normalizedInput, repeatedSegment);
+
+                var keywordAbuse = CalculateKeywordAbuseScore(normalizedInput);
+                LogSignal(normalizedInput, keywordAbuse);
+
+                // Cap at 100 so structural signals share the same ceiling as a blocklist match.
+                var overallRisk = Math.Min(100, typosquatting.Score + subdomain.Score + hyphen.Score
+                    + entropy.Score + repeatedSegment.Score + keywordAbuse.Score);
+
+                var triggeredSignals = new[] { typosquatting, subdomain, hyphen, entropy, repeatedSegment, keywordAbuse }
                     .Where(signal => signal.Triggered)
                     .Select(signal => signal.Signal)
                     .ToArray();
@@ -275,6 +271,8 @@ namespace SSA_Final.Services
                     ExcessiveSubdomains = subdomain,
                     HyphenAbuse = hyphen,
                     ShannonEntropy = entropy,
+                    RepeatedSegment = repeatedSegment,
+                    KeywordAbuse = keywordAbuse,
                     IsBlocklistMatch = false,
                     BlocklistSource = null,
                     UsedBlocklistFallback = blocklistResult.IsStale,
@@ -317,7 +315,9 @@ namespace SSA_Final.Services
                 riskResult.TyposquattingEditDistance,
                 riskResult.ExcessiveSubdomains,
                 riskResult.HyphenAbuse,
-                riskResult.ShannonEntropy
+                riskResult.ShannonEntropy,
+                riskResult.RepeatedSegment,
+                riskResult.KeywordAbuse
             };
 
             foreach (var signal in signals)
@@ -415,10 +415,14 @@ namespace SSA_Final.Services
                 $"Detected {subdomainCount} subdomain label(s).");
         }
 
+        // Counts hyphens in the registrable label only. Hyphens that appear in subdomain prefixes
+        // are covered by the KeywordAbuse signal and should not inflate the hyphen score.
         private static DomainRiskSignalScore CalculateHyphenScore(string normalizedDomain)
         {
-            var hyphenCount = normalizedDomain.Count(c => c == '-');
-            var repeatedPatternCount = Regex.Matches(normalizedDomain, "--").Count;
+            var rootLabel = GetRootDomainLabel(normalizedDomain);
+
+            var hyphenCount = rootLabel.Count(c => c == '-');
+            var repeatedPatternCount = Regex.Matches(rootLabel, "--").Count;
 
             var score = hyphenCount switch
             {
@@ -438,12 +442,15 @@ namespace SSA_Final.Services
                 "Hyphen Abuse",
                 score,
                 score > 0,
-                $"Detected {hyphenCount} hyphen(s) and {repeatedPatternCount} repeated hyphen pattern(s).");
+                $"Detected {hyphenCount} hyphen(s) and {repeatedPatternCount} repeated hyphen pattern(s) in registrable label.");
         }
 
+        // Computes Shannon entropy on the registrable label only. Using the full domain string
+        // (including TLD characters) inflates low-entropy scores and dilutes genuine DGA signals.
         private static DomainRiskSignalScore CalculateEntropyScore(string normalizedDomain)
         {
-            var sample = new string(normalizedDomain.Where(char.IsLetterOrDigit).ToArray());
+            var rootLabel = GetRootDomainLabel(normalizedDomain);
+            var sample = new string(rootLabel.Where(char.IsLetterOrDigit).ToArray());
             var entropy = CalculateShannonEntropy(sample);
 
             var score = entropy switch
@@ -454,9 +461,8 @@ namespace SSA_Final.Services
                 _ => 25
             };
 
-            var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
-            var longestLabel = labels.Length == 0 ? 0 : labels.Max(label => label.Length);
-            if (longestLabel >= 15 && entropy >= 3.5)
+            // Long, high-entropy labels are a strong DGA signal.
+            if (rootLabel.Length >= 15 && entropy >= 3.5)
             {
                 score = Math.Min(25, score + 4);
             }
@@ -465,7 +471,109 @@ namespace SSA_Final.Services
                 "Shannon Entropy",
                 score,
                 score > 0,
-                $"Calculated entropy across alphanumeric characters is {entropy:F2}.");
+                $"Registrable label entropy is {entropy:F2}.");
+        }
+
+        // Detects consecutive repeated tokens in the subdomain chain (e.g., login.login.paypal.com)
+        // or in the hyphen-delimited registrable label (e.g., login-login-paypal.com).
+        // These patterns are almost exclusively machine-generated noise or low-effort spam.
+        private static DomainRiskSignalScore CalculateRepeatedSegmentScore(string normalizedDomain)
+        {
+            var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            var consecutiveRepeatCount = 0;
+
+            // Check for consecutive repeated labels in the subdomain chain.
+            for (var i = 0; i < labels.Length - 1; i++)
+            {
+                if (labels[i].Equals(labels[i + 1], StringComparison.OrdinalIgnoreCase))
+                {
+                    consecutiveRepeatCount++;
+                }
+            }
+
+            // Check for consecutive repeated tokens in the registrable label.
+            if (labels.Length >= 2)
+            {
+                var rootLabel = labels[^2];
+                var hyphenTokens = rootLabel.Split('-', StringSplitOptions.RemoveEmptyEntries);
+                for (var i = 0; i < hyphenTokens.Length - 1; i++)
+                {
+                    if (hyphenTokens[i].Equals(hyphenTokens[i + 1], StringComparison.OrdinalIgnoreCase))
+                    {
+                        consecutiveRepeatCount++;
+                    }
+                }
+            }
+
+            var score = consecutiveRepeatCount switch
+            {
+                0 => 0,
+                1 => 20,
+                _ => 25
+            };
+
+            return new DomainRiskSignalScore(
+                "Repeated Segment",
+                score,
+                score > 0,
+                score > 0
+                    ? $"Detected {consecutiveRepeatCount} consecutive repeated token(s)."
+                    : "No repeated segment patterns detected.");
+        }
+
+        // Detects known phishing keywords embedded in the registrable label or any subdomain label.
+        // Keyword presence in the registrable label (e.g., loginpaypal.com, paypal-login.com) is
+        // scored higher than keywords appearing only in subdomain prefixes (e.g., login.paypal.com).
+        private static DomainRiskSignalScore CalculateKeywordAbuseScore(string normalizedDomain)
+        {
+            var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            if (labels.Length < 2)
+            {
+                return new DomainRiskSignalScore("Keyword Abuse", 0, false, "No label available for keyword check.");
+            }
+
+            var rootLabel = labels[^2];
+            var subdomainLabels = labels.Length > 2
+                ? labels.Take(labels.Length - 2).ToArray()
+                : Array.Empty<string>();
+
+            var score = 0;
+            var matchedKeywords = new List<string>();
+
+            // Check if a phishing keyword is embedded in the registrable label itself.
+            foreach (var keyword in PhishingKeywords)
+            {
+                if (rootLabel.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                {
+                    score += 15;
+                    matchedKeywords.Add($"'{keyword}' in label");
+                    break; // One label-level keyword match is sufficient.
+                }
+            }
+
+            // Check if any subdomain label is or contains a phishing keyword.
+            foreach (var subLabel in subdomainLabels)
+            {
+                foreach (var keyword in PhishingKeywords)
+                {
+                    if (subLabel.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += 10;
+                        matchedKeywords.Add($"'{keyword}' in subdomain");
+                        break; // One keyword per subdomain label is sufficient.
+                    }
+                }
+            }
+
+            score = Math.Min(25, score);
+
+            return new DomainRiskSignalScore(
+                "Keyword Abuse",
+                score,
+                score > 0,
+                score > 0
+                    ? $"Phishing keyword(s) detected: {string.Join(", ", matchedKeywords)}."
+                    : "No phishing keyword patterns detected.");
         }
 
         private static string GetRootDomainLabel(string normalizedDomain)
@@ -629,6 +737,19 @@ namespace SSA_Final.Services
             }
         }
 
+        private void LogSignal(string domain, DomainRiskSignalScore signal)
+        {
+            _logger.LogDebug(
+                "[DomainAnalyzerService] Signal calculated for {Domain}: {Signal} Score={Score} Triggered={Triggered} Detail={Detail}",
+                domain,
+                signal.Signal,
+                signal.Score,
+                signal.Triggered,
+                signal.Detail);
+        }
+
+        // ── Result builders ───────────────────────────────────────────────────
+
         private static DomainAnalysisResult BuildServiceFailureResult(string? domainInput, string message)
         {
             var safeDomain = NormalizeDomain(domainInput) ?? string.Empty;
@@ -644,6 +765,8 @@ namespace SSA_Final.Services
                 ExcessiveSubdomains = emptySignal,
                 HyphenAbuse = emptySignal,
                 ShannonEntropy = emptySignal,
+                RepeatedSegment = emptySignal,
+                KeywordAbuse = emptySignal,
                 IsBlocklistMatch = false,
                 UsedBlocklistFallback = true,
                 IsSuspicious = false,
@@ -667,6 +790,8 @@ namespace SSA_Final.Services
                 ExcessiveSubdomains = emptySignal,
                 HyphenAbuse = emptySignal,
                 ShannonEntropy = emptySignal,
+                RepeatedSegment = emptySignal,
+                KeywordAbuse = emptySignal,
                 IsBlocklistMatch = false,
                 IsSuspicious = false,
                 Summary = "No domain supplied - analysis skipped.",
@@ -689,6 +814,8 @@ namespace SSA_Final.Services
                 ExcessiveSubdomains = noRisk,
                 HyphenAbuse = noRisk,
                 ShannonEntropy = noRisk,
+                RepeatedSegment = noRisk,
+                KeywordAbuse = noRisk,
                 IsBlocklistMatch = false,
                 IsSuspicious = false,
                 Summary = "Domain found in active-domain list.",
@@ -701,7 +828,7 @@ namespace SSA_Final.Services
 
         private async Task RunNetworkChecksAsync(string domain, List<string> indicators)
         {
-            // 1. DNS Pre-flight: If the domain doesn't exist, don't bother with HTTP/SSL
+            // 1. DNS Pre-flight: If the domain doesn't exist, don't bother with HTTP/SSL.
             if (!await IsDomainResolvableAsync(domain))
             {
                 _logger.LogInformation("[DomainAnalyzerService] Domain {Domain} has no DNS records. Skipping network checks.", domain);
@@ -803,6 +930,13 @@ namespace SSA_Final.Services
                     return;
                 }
 
+                // Pre-compute domain tokens once so all brand-mismatch checks can reuse them.
+                var domainTokens = domain
+                    .ToLowerInvariant()
+                    .Split('.', StringSplitOptions.RemoveEmptyEntries)
+                    .SelectMany(l => l.Split('-', StringSplitOptions.RemoveEmptyEntries))
+                    .ToHashSet(StringComparer.Ordinal);
+
                 if (Regex.IsMatch(html,
                     @"<input[^>]+type\s*=\s*[""']?password[""']?",
                     RegexOptions.IgnoreCase))
@@ -817,6 +951,13 @@ namespace SSA_Final.Services
                     indicators.Add("Login form detected in page HTML");
                 }
 
+                // Iframes are commonly used in phishing pages to load legitimate-looking
+                // content while credential harvesting happens in the background.
+                if (Regex.IsMatch(html, @"<iframe\s", RegexOptions.IgnoreCase))
+                {
+                    indicators.Add("Iframe element detected in page HTML");
+                }
+
                 var titleMatch = Regex.Match(html,
                     @"<title[^>]*>(.*?)</title>",
                     RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -824,23 +965,57 @@ namespace SSA_Final.Services
                 if (titleMatch.Success)
                 {
                     var title = titleMatch.Groups[1].Value.ToLowerInvariant();
-
                     var brandInTitle = Array.Find(KnownBrands,
                         b => title.Contains(b, StringComparison.Ordinal));
 
-                    if (brandInTitle is not null)
+                    if (brandInTitle is not null && !domainTokens.Contains(brandInTitle))
                     {
-                        var domainTokens = domain
-                            .ToLowerInvariant()
-                            .Split('.', StringSplitOptions.RemoveEmptyEntries)
-                            .SelectMany(l => l.Split('-', StringSplitOptions.RemoveEmptyEntries));
-
-                        if (!domainTokens.Contains(brandInTitle, StringComparer.Ordinal))
-                        {
-                            indicators.Add(
-                                $"Brand keyword mismatch: page title references '{brandInTitle}' but domain does not");
-                        }
+                        indicators.Add(
+                            $"Brand keyword mismatch: page title references '{brandInTitle}' but domain does not");
                     }
+                }
+
+                CheckMetaBrandMismatch(html, domainTokens, indicators);
+            }
+        }
+
+        // Scans <meta name="description"> and <meta name="keywords"> tags for brand names that
+        // don't appear in the domain itself — a strong signal that a page is impersonating a brand.
+        private static void CheckMetaBrandMismatch(
+            string html,
+            HashSet<string> domainTokens,
+            List<string> indicators)
+        {
+            foreach (Match metaTag in Regex.Matches(html, @"<meta\s[^>]*>", RegexOptions.IgnoreCase))
+            {
+                var tag = metaTag.Value;
+
+                // Only inspect description and keywords meta tags.
+                if (!Regex.IsMatch(tag,
+                    @"name\s*=\s*[""']?\s*(description|keywords)\s*[""']?",
+                    RegexOptions.IgnoreCase))
+                {
+                    continue;
+                }
+
+                var contentMatch = Regex.Match(tag,
+                    @"content\s*=\s*[""']([^""']*)[""']",
+                    RegexOptions.IgnoreCase);
+
+                if (!contentMatch.Success)
+                {
+                    continue;
+                }
+
+                var content = contentMatch.Groups[1].Value.ToLowerInvariant();
+                var brandInMeta = Array.Find(KnownBrands,
+                    b => content.Contains(b, StringComparison.Ordinal));
+
+                if (brandInMeta is not null && !domainTokens.Contains(brandInMeta))
+                {
+                    indicators.Add(
+                        $"Brand keyword mismatch: meta tag references '{brandInMeta}' but domain does not");
+                    return; // One meta mismatch indicator is sufficient.
                 }
             }
         }

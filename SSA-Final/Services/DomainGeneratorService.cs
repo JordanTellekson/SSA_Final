@@ -1,5 +1,5 @@
-﻿// Variation generator service that creates basic domain permutations for scanning.
-// This implementation is intentionally simple and can be replaced with richer logic.
+// Variation generator service that creates domain permutations for scanning.
+// Only plausible variants that a real phisher might register are emitted.
 
 using SSA_Final.Interfaces;
 
@@ -8,12 +8,24 @@ namespace SSA_Final.Services
     public class DomainGeneratorService : IDomainGenerator
     {
         private readonly ILogger<DomainGeneratorService> _logger;
-        private const int MaxAddedSubdomains = 4;
-        private const int MaxAddedHyphens = 6;
-        private const int MaxHyphenVariantsPerDomain = 3000;
-        private static readonly string[] CommonTlds = ["com", "net", "org", "co", "io", "xyz", "top", "tk", "ru", "pw", "cc",
-                "buzz", "gq", "ml", "cf", "ga", "info", "biz", "online", "site", "club", "vip", "shop", "website"];
-        private static readonly string[] SubdomainPrefixes = ["secure", "login", "account", "verify", "blog"];
+
+        // Subdomain depth cap: real phishing campaigns rarely exceed 2 stacked prefix labels.
+        private const int MaxAddedSubdomains = 2;
+
+        // Hyphen insertion cap: more than 3 injected hyphens produces implausible labels.
+        private const int MaxAddedHyphens = 3;
+
+        // Per-domain cap on hyphen-insertion variants.
+        private const int MaxHyphenVariantsPerDomain = 100;
+
+        private static readonly string[] CommonTlds =
+        [
+            "com", "net", "org", "co", "io", "xyz", "top", "tk", "ru", "pw", "cc",
+            "buzz", "gq", "ml", "cf", "ga", "info", "biz", "online", "site", "club", "vip", "shop", "website"
+        ];
+
+        private static readonly string[] SubdomainPrefixes =
+            ["secure", "login", "account", "verify", "blog"];
 
         // QWERTY-adjacent keys for likely typo substitutions.
         private static readonly Dictionary<char, char[]> AdjacentKeys = new()
@@ -56,7 +68,7 @@ namespace SSA_Final.Services
             ['9'] = ['8', '0', 'o', 'i']
         };
 
-        // Includes one-char and multi-char substitutions.
+        // One-char and multi-char visual substitutions used by phishers.
         private static readonly Dictionary<string, string[]> HomoglyphMap = new(StringComparer.Ordinal)
         {
             ["0"] = ["O"],
@@ -117,29 +129,30 @@ namespace SSA_Final.Services
 
             var variations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            addTyposquatting(subdomains, label, tld, variations);
-            addHyphen(subdomains, label, tld, variations);
-            addSubdomains(subdomains, label, tld, variations);
+            AddTyposquatting(subdomains, label, tld, variations);
+            AddHyphen(subdomains, label, tld, variations);
+            AddSubdomains(subdomains, label, tld, variations);
 
-            // Remove the original input from output set.
+            // Remove the original input from the output set.
             variations.Remove(normalized);
 
+            // Apply the plausibility filter to strip implausible generated variants.
             var output = variations
-                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Where(v => !string.IsNullOrWhiteSpace(v) && IsPlausibleVariant(v))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            var entropy = testShannonEntropy(label);
-
             _logger.LogInformation(
-                "[DomainGeneratorService] Generated {Count} variation(s) for domain: {Domain}. ShannonEntropy={Entropy:F2}",
-                output.Count, normalized, entropy);
+                "[DomainGeneratorService] Generated {Count} variation(s) for domain: {Domain}. LabelEntropy={Entropy:F2}",
+                output.Count, normalized, ComputeShannonEntropy(label));
 
             return output;
         }
 
-        // Adds subdomain- and prefix-based lookalikes such as secure.example.com and secure-example.com.
-        private void addSubdomains(string subdomains, string label, string tld, ISet<string> variations)
+        // Adds subdomain- and prefix-based lookalikes such as secure.example.com.
+        // Hyphen-prefix forms (e.g., login-paypal.com) are only emitted for single-prefix (depth=1)
+        // sequences; multi-segment hyphen chains (login-blog-paypal.com) are implausible phishing patterns.
+        private static void AddSubdomains(string subdomains, string label, string tld, ISet<string> variations)
         {
             if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(tld))
             {
@@ -156,18 +169,32 @@ namespace SSA_Final.Services
             {
                 foreach (var prefixSequence in EnumeratePrefixSequences(depth))
                 {
+                    // Dot-subdomain form is always emitted (e.g., login.paypal.com, login.secure.paypal.com).
                     var dotPrefix = string.Join('.', prefixSequence);
-                    var hyphenPrefix = string.Join('-', prefixSequence);
-
                     variations.Add($"{dotPrefix}.{rootDomain}");
-                    variations.Add(BuildDomain(subdomains, $"{hyphenPrefix}-{label}", tld));
-                    variations.Add(BuildDomain(subdomains, $"{label}-{hyphenPrefix}", tld));
+
+                    // Hyphen forms are only realistic for single- and two-prefix sequences.
+                    if (depth == 1)
+                    {
+                        var prefix = prefixSequence[0];
+                        variations.Add(BuildDomain(subdomains, $"{prefix}-{label}", tld));
+                        variations.Add(BuildDomain(subdomains, $"{label}-{prefix}", tld));
+                    }
+                    else if (depth == 2)
+                    {
+                        // Two-prefix hyphen chains cover realistic patterns such as
+                        // paypal-secure-login.com and secure-login-paypal.com.
+                        var prefix1 = prefixSequence[0];
+                        var prefix2 = prefixSequence[1];
+                        variations.Add(BuildDomain(subdomains, $"{label}-{prefix1}-{prefix2}", tld));
+                        variations.Add(BuildDomain(subdomains, $"{prefix1}-{prefix2}-{label}", tld));
+                    }
                 }
             }
         }
 
-        // Inserts additional hyphens into the label, including domains that already contain hyphens.
-        private void addHyphen(string subdomains, string label, string tld, ISet<string> variations)
+        // Inserts additional hyphens into the label at each character gap.
+        private static void AddHyphen(string subdomains, string label, string tld, ISet<string> variations)
         {
             if (label.Length < 2)
             {
@@ -176,12 +203,11 @@ namespace SSA_Final.Services
 
             var gaps = label.Length - 1;
             var created = 0;
-            var maxHyphens = MaxAddedHyphens;
 
-            for (var hyphensToInsert = 1; hyphensToInsert <= maxHyphens; hyphensToInsert++)
+            for (var hyphensToInsert = 1; hyphensToInsert <= MaxAddedHyphens; hyphensToInsert++)
             {
                 var distribution = new int[gaps];
-                addHyphenPatterns(0, hyphensToInsert, distribution);
+                AddHyphenPatterns(0, hyphensToInsert, distribution);
 
                 if (created >= MaxHyphenVariantsPerDomain)
                 {
@@ -189,7 +215,7 @@ namespace SSA_Final.Services
                 }
             }
 
-            void addHyphenPatterns(int gapIndex, int remaining, int[] distribution)
+            void AddHyphenPatterns(int gapIndex, int remaining, int[] distribution)
             {
                 if (created >= MaxHyphenVariantsPerDomain)
                 {
@@ -216,7 +242,7 @@ namespace SSA_Final.Services
                 for (var insertionsAtGap = 0; insertionsAtGap <= remaining; insertionsAtGap++)
                 {
                     distribution[gapIndex] = insertionsAtGap;
-                    addHyphenPatterns(gapIndex + 1, remaining - insertionsAtGap, distribution);
+                    AddHyphenPatterns(gapIndex + 1, remaining - insertionsAtGap, distribution);
 
                     if (created >= MaxHyphenVariantsPerDomain)
                     {
@@ -230,7 +256,7 @@ namespace SSA_Final.Services
 
         // Generates typosquatting variants via omission, duplication, adjacent keys, transposition,
         // homoglyphs, and common TLD swaps.
-        private void addTyposquatting(string subdomains, string label, string tld, ISet<string> variations)
+        private static void AddTyposquatting(string subdomains, string label, string tld, ISet<string> variations)
         {
             if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(tld))
             {
@@ -318,8 +344,53 @@ namespace SSA_Final.Services
             }
         }
 
-        // Shannon entropy helper for identifying highly random labels.
-        private static double testShannonEntropy(string value)
+        // Returns false for structurally implausible domains that no real phisher would register:
+        //   — registrable labels exceeding 40 characters
+        //   — labels containing three or more consecutive hyphens
+        //   — hyphen-delimited label tokens that repeat consecutively (e.g., login-login-paypal)
+        //   — subdomain chain labels that repeat consecutively (e.g., login.login.paypal.com)
+        private static bool IsPlausibleVariant(string domain)
+        {
+            if (!SplitDomain(domain, out _, out var label, out _))
+            {
+                return false;
+            }
+
+            if (label.Length > 40)
+            {
+                return false;
+            }
+
+            if (label.Contains("---", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // Reject hyphen-delimited tokens that repeat consecutively.
+            var hyphenTokens = label.Split('-', StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < hyphenTokens.Length - 1; i++)
+            {
+                if (hyphenTokens[i].Equals(hyphenTokens[i + 1], StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            // Reject subdomain chain labels that repeat consecutively.
+            var allLabels = domain.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < allLabels.Length - 1; i++)
+            {
+                if (allLabels[i].Equals(allLabels[i + 1], StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // Shannon entropy helper used for diagnostic logging.
+        private static double ComputeShannonEntropy(string value)
         {
             if (string.IsNullOrEmpty(value))
             {
@@ -328,7 +399,7 @@ namespace SSA_Final.Services
 
             var frequencies = value
                 .GroupBy(ch => ch)
-                .Select(group => (double)group.Count() / value.Length);
+                .Select(g => (double)g.Count() / value.Length);
 
             var entropy = 0.0;
             foreach (var p in frequencies)
@@ -421,14 +492,19 @@ namespace SSA_Final.Services
             return result.ToString();
         }
 
+        // Enumerates prefix sequences of the requested depth using permutations without repetition.
+        // Each prefix appears at most once per sequence, preventing degenerate patterns such as
+        // ["login","login","login"] that produce implausible filler domains like login-login-login-paypal.net.
         private static IEnumerable<IReadOnlyList<string>> EnumeratePrefixSequences(int depth)
         {
-            if (depth <= 0)
+            if (depth <= 0 || depth > SubdomainPrefixes.Length)
             {
                 yield break;
             }
 
             var buffer = new string[depth];
+            var used = new bool[SubdomainPrefixes.Length];
+
             foreach (var sequence in Enumerate(0))
             {
                 yield return sequence;
@@ -442,16 +518,24 @@ namespace SSA_Final.Services
                     yield break;
                 }
 
-                foreach (var prefix in SubdomainPrefixes)
+                for (var i = 0; i < SubdomainPrefixes.Length; i++)
                 {
-                    buffer[index] = prefix;
+                    if (used[i])
+                    {
+                        continue;
+                    }
+
+                    used[i] = true;
+                    buffer[index] = SubdomainPrefixes[i];
+
                     foreach (var item in Enumerate(index + 1))
                     {
                         yield return item;
                     }
+
+                    used[i] = false;
                 }
             }
         }
     }
 }
-
