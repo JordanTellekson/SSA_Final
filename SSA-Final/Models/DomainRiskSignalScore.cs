@@ -1,3 +1,5 @@
+// Immutable model representing one risk signal, its score contribution, and detail.
+
 namespace SSA_Final.Models
 {
     // Individual risk-signal score (one of the risk checks) with context details.
@@ -20,3 +22,5 @@ namespace SSA_Final.Models
         public string Detail { get; }
     }
 }
+
+

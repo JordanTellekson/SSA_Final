@@ -1,0 +1,16 @@
+# Legitimate domains used as trusted comparison candidates.
+# One domain per line. Use plain hostnames (no scheme/path).
+google.com
+microsoft.com
+apple.com
+amazon.com
+paypal.com
+bankofamerica.com
+chase.com
+wellsfargo.com
+netflix.com
+facebook.com
+instagram.com
+x.com
+github.com
+openai.com

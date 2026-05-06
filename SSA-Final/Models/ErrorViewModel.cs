@@ -1,3 +1,5 @@
+// View model used by the shared error page to surface request correlation IDs.
+
 namespace SSA_Final.Models
 {
     public class ErrorViewModel
@@ -7,3 +9,5 @@ namespace SSA_Final.Models
         public bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
     }
 }
+
+

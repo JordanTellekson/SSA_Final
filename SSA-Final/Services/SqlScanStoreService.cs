@@ -123,11 +123,19 @@ namespace SSA_Final.Services
 
         public async Task<bool> GetAnyAsync()
         {
+            _logger.LogDebug("[SqlScanStoreService] Checking whether any scan records exist.");
             return await _dbContext.DomainScans.AnyAsync();
         }
 
         public async Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
         {
+            _logger.LogDebug(
+                "[SqlScanStoreService] Retrieving paged scans. Page={Page} PageSize={PageSize} Status={Status} HasMalicious={HasMalicious} Query={Query}",
+                query.Page,
+                query.PageSize,
+                query.Status,
+                query.HasMalicious,
+                query.Query);
             query.Page = Math.Max(1, query.Page);
             query.PageSize = Math.Clamp(query.PageSize, 1, 100);
 
@@ -195,6 +203,10 @@ namespace SSA_Final.Services
             Guid scanId,
             VariantQuery query)
         {
+            _logger.LogDebug(
+                "[SqlScanStoreService] Retrieving variants for scan {ScanId}. Query={Query}",
+                scanId,
+                query.Query);
             query.Query = string.IsNullOrWhiteSpace(query.Query)
                 ? null
                 : query.Query.Trim();
@@ -212,3 +224,5 @@ namespace SSA_Final.Services
         }
     }
 }
+
+
