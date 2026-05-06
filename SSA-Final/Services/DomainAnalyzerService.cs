@@ -15,9 +15,10 @@ namespace SSA_Final.Services
         private readonly ISslCertificateChecker _sslChecker;
         private readonly ILogger<DomainAnalyzerService> _logger;
         private readonly int _timeoutSeconds;
-        private readonly string _domainsFilePath;
-        private readonly Lazy<HashSet<string>> _activeDomains;
-        private readonly Lazy<List<string>> _activeRootDomains;
+        private readonly string _legitimateDomainsFilePath;
+        private readonly Lazy<HashSet<string>> _knownLegitimateDomains;
+        private readonly Lazy<List<string>> _knownLegitimateRootDomains;
+        private readonly Lazy<Dictionary<int, List<string>>> _knownLegitimateRootsByLength;
         private readonly IPhishingBlocklistService? _blocklistService;
 
         // ── Structural-risk data ──────────────────────────────────────────────
@@ -55,15 +56,21 @@ namespace SSA_Final.Services
             _timeoutSeconds = configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds", 5);
 
             var contentRoot = hostEnvironment?.ContentRootPath ?? Directory.GetCurrentDirectory();
-            _domainsFilePath = Path.Combine(contentRoot, "Active_Domains.txt");
+            _legitimateDomainsFilePath = Path.Combine(contentRoot, "Legitimate_Domains.txt");
 
-            _activeDomains = new Lazy<HashSet<string>>(LoadDomains);
-            _activeRootDomains = new Lazy<List<string>>(() =>
-                _activeDomains.Value
+            _knownLegitimateDomains = new Lazy<HashSet<string>>(LoadKnownLegitimateDomains);
+            _knownLegitimateRootDomains = new Lazy<List<string>>(() =>
+                _knownLegitimateDomains.Value
                     .Select(GetRootDomainLabel)
                     .Where(root => !string.IsNullOrWhiteSpace(root))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList());
+            _knownLegitimateRootsByLength = new Lazy<Dictionary<int, List<string>>>(() =>
+                _knownLegitimateRootDomains.Value
+                    .GroupBy(root => root.Length)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.ToList()));
         }
 
         // ── IDomainAnalyzer ───────────────────────────────────────────────────
@@ -140,7 +147,7 @@ namespace SSA_Final.Services
                     return false;
                 }
 
-                return _activeDomains.Value.Contains(normalizedInput);
+                return _knownLegitimateDomains.Value.Contains(normalizedInput);
             }
             catch (Exception ex)
             {
@@ -163,7 +170,7 @@ namespace SSA_Final.Services
                     "[DomainAnalyzerService] Structural risk analysis started for {Domain}.",
                     normalizedInput);
 
-                if (_activeDomains.Value.Contains(normalizedInput))
+                if (_knownLegitimateDomains.Value.Contains(normalizedInput))
                 {
                     return BuildKnownActiveDomainResult(normalizedInput);
                 }
@@ -347,9 +354,7 @@ namespace SSA_Final.Services
                 return new DomainRiskSignalScore("Typosquatting/Edit Distance", 0, false, "No root label available.");
             }
 
-            IEnumerable<string> candidates = _activeRootDomains.Value.Count > 0
-                ? _activeRootDomains.Value
-                : KnownBrands;
+            IEnumerable<string> candidates = BuildTyposquattingCandidates(rootLabel);
 
             var closestBrand = string.Empty;
             var minDistance = int.MaxValue;
@@ -574,19 +579,38 @@ namespace SSA_Final.Services
             return string.IsNullOrWhiteSpace(host) ? null : host.ToLowerInvariant();
         }
 
-        private HashSet<string> LoadDomains()
+        private IEnumerable<string> BuildTyposquattingCandidates(string rootLabel)
+        {
+            if (_knownLegitimateRootDomains.Value.Count == 0)
+            {
+                return KnownBrands;
+            }
+
+            var matches = new List<string>();
+            for (var length = rootLabel.Length - 3; length <= rootLabel.Length + 3; length++)
+            {
+                if (_knownLegitimateRootsByLength.Value.TryGetValue(length, out var roots))
+                {
+                    matches.AddRange(roots);
+                }
+            }
+
+            return matches.Count > 0 ? matches : _knownLegitimateRootDomains.Value;
+        }
+
+        private HashSet<string> LoadKnownLegitimateDomains()
         {
             try
             {
-                if (!File.Exists(_domainsFilePath))
+                if (!File.Exists(_legitimateDomainsFilePath))
                 {
-                    _logger.LogWarning("Domain allow-list not found at path: {Path}", _domainsFilePath);
+                    _logger.LogWarning("Legitimate domain list not found at path: {Path}", _legitimateDomainsFilePath);
                     return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 }
 
                 var domains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                foreach (var line in File.ReadLines(_domainsFilePath))
+                foreach (var line in File.ReadLines(_legitimateDomainsFilePath))
                 {
                     var normalized = NormalizeDomain(line);
                     if (!string.IsNullOrWhiteSpace(normalized))
@@ -595,12 +619,12 @@ namespace SSA_Final.Services
                     }
                 }
 
-                _logger.LogInformation("Loaded {Count} active domains for risk analysis.", domains.Count);
+                _logger.LogInformation("Loaded {Count} legitimate domains for risk analysis.", domains.Count);
                 return domains;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to load domain allow-list from path: {Path}", _domainsFilePath);
+                _logger.LogError(ex, "Failed to load legitimate domain list from path: {Path}", _legitimateDomainsFilePath);
                 return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             }
         }
@@ -653,7 +677,7 @@ namespace SSA_Final.Services
 
         private static DomainAnalysisResult BuildKnownActiveDomainResult(string domain)
         {
-            var noRisk = new DomainRiskSignalScore("N/A", 0, false, "Domain is already in Active_Domains.txt.");
+            var noRisk = new DomainRiskSignalScore("N/A", 0, false, "Domain is already in Legitimate_Domains.txt.");
             return new DomainAnalysisResult
             {
                 InputDomain = domain,
