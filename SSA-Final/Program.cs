@@ -57,6 +57,7 @@ var scanChannel = Channel.CreateUnbounded<Guid>(new UnboundedChannelOptions
 builder.Services.AddSingleton(scanChannel.Writer);
 builder.Services.AddSingleton(scanChannel.Reader);
 builder.Services.AddHostedService<ScanBackgroundService>();
+builder.Services.AddHostedService<FeedIngestionBackgroundService>();
 
 var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
 var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
@@ -97,6 +98,7 @@ logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Sing
 logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, FeedSource.OpenPhish.");
 logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
 logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
+logger.LogInformation("Registered FeedIngestionBackgroundService (IHostedService).");
 
 // Configure Identity
 builder.Services.AddDefaultIdentity<IdentityUser>(options =>
