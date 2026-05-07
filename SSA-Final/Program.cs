@@ -44,6 +44,7 @@ builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
+builder.Services.AddSingleton<IDomainFeedSource, OpenPhishFeedSource>();
 
 
 // Scan background job infrastructure: register an unbounded channel and expose both
@@ -59,6 +60,13 @@ builder.Services.AddHostedService<ScanBackgroundService>();
 
 var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
 var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
+
+var feedTimeoutSeconds = builder.Configuration.GetValue<int>("FeedSources:OpenPhish:TimeoutSeconds");
+var feedTimeoutSpan = TimeSpan.FromSeconds(feedTimeoutSeconds > 0 ? feedTimeoutSeconds : 30);
+builder.Services.AddHttpClient(OpenPhishFeedSource.HttpClientName, client =>
+{
+    client.Timeout = feedTimeoutSpan;
+});
 
 // 1. NoRedirect Client
 builder.Services.AddHttpClient("DomainAnalyzer.NoRedirect", client => {
@@ -85,7 +93,8 @@ logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Sc
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
-logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow.");
+logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Singleton).");
+logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, FeedSource.OpenPhish.");
 logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
 logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
 
