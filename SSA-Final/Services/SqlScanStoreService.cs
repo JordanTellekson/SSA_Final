@@ -127,6 +127,15 @@ namespace SSA_Final.Services
             return await _dbContext.DomainScans.AnyAsync();
         }
 
+        public async Task<bool> WasRecentlyScannedAsync(string domain, TimeSpan window)
+        {
+            var normalizedDomain = domain.Trim().ToLowerInvariant();
+            var cutoff = DateTime.UtcNow - window;
+
+            return await _dbContext.DomainScans
+                .AnyAsync(s => s.BaseDomain == normalizedDomain && s.CreatedAt >= cutoff);
+        }
+
         public async Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
         {
             _logger.LogDebug(
