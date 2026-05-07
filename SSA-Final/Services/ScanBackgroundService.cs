@@ -154,43 +154,64 @@ namespace SSA_Final.Services
 
             try
             {
-                var variants = domainGenerator.GenerateVariations(scan.BaseDomain).ToList();
-                _logger.LogInformation(
-                    "Scan {DomainScanId}: generated {Count} variant(s) for '{Domain}'.",
-                    scanId, variants.Count, scan.BaseDomain);
+                List<DomainAnalysisResult> analysisResults;
 
-                var analysisResults = new List<DomainAnalysisResult>();
-
-                foreach (var variant in variants)
+                if (scan.ScanTrigger == ScanTrigger.Manual)
                 {
-                    stoppingToken.ThrowIfCancellationRequested();
+                    // Manual scans: generate typosquat variants and analyse each one.
+                    var variants = domainGenerator.GenerateVariations(scan.BaseDomain).ToList();
+                    _logger.LogInformation(
+                        "Scan {DomainScanId}: generated {Count} variant(s) for '{Domain}'.",
+                        scanId, variants.Count, scan.BaseDomain);
 
-                    DomainAnalysisResult result;
-                    try
+                    analysisResults = new List<DomainAnalysisResult>();
+
+                    foreach (var variant in variants)
                     {
-                        result = await _retryPipeline.ExecuteAsync(
-                            async ct => await domainAnalyzer.Analyze(variant),
-                            stoppingToken);
+                        stoppingToken.ThrowIfCancellationRequested();
+
+                        DomainAnalysisResult result;
+                        try
+                        {
+                            result = await _retryPipeline.ExecuteAsync(
+                                async ct => await domainAnalyzer.Analyze(variant),
+                                stoppingToken);
+                        }
+                        catch (HttpRequestException ex)
+                        {
+                            // All retries exhausted for this variant — log and skip rather than
+                            // failing the entire scan over a single unresolvable domain.
+                            _logger.LogWarning(
+                                ex,
+                                "Scan {DomainScanId}: variant '{Variant}' skipped after all retries exhausted.",
+                                scanId, variant);
+                            continue;
+                        }
+
+                        result.DomainScanId = scanId;
+                        analysisResults.Add(result);
+
+                        // Throttle between variant analyses to avoid overwhelming external services.
+                        if (_perVariantDelayMs > 0)
+                        {
+                            await Task.Delay(_perVariantDelayMs, stoppingToken);
+                        }
                     }
-                    catch (HttpRequestException ex)
-                    {
-                        // All retries exhausted for this variant — log and skip rather than
-                        // failing the entire scan over a single unresolvable domain.
-                        _logger.LogWarning(
-                            ex,
-                            "Scan {DomainScanId}: variant '{Variant}' skipped after all retries exhausted.",
-                            scanId, variant);
-                        continue;
-                    }
+                }
+                else
+                {
+                    // FeedIngestion / Scheduled: the domain is already a suspected phishing domain
+                    // sourced externally — skip variant generation and analyse it directly.
+                    _logger.LogInformation(
+                        "Scan {DomainScanId}: trigger is {Trigger} — analysing '{Domain}' directly (no variant generation).",
+                        scanId, scan.ScanTrigger, scan.BaseDomain);
+
+                    var result = await _retryPipeline.ExecuteAsync(
+                        async ct => await domainAnalyzer.Analyze(scan.BaseDomain),
+                        stoppingToken);
 
                     result.DomainScanId = scanId;
-                    analysisResults.Add(result);
-
-                    // Throttle between variant analyses to avoid overwhelming external services.
-                    if (_perVariantDelayMs > 0)
-                    {
-                        await Task.Delay(_perVariantDelayMs, stoppingToken);
-                    }
+                    analysisResults = new List<DomainAnalysisResult> { result };
                 }
 
                 scan.Variants = analysisResults;

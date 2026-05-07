@@ -49,6 +49,7 @@ namespace SSA_Final.Controllers
                 BaseDomain = baseDomain,
                 CreatedAt = DateTime.UtcNow,
                 Status = DomainScanStatus.Pending,
+                ScanTrigger = ScanTrigger.Manual,
                 NumMaliciousDomains = 0
             };
 

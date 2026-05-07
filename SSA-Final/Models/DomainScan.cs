@@ -9,6 +9,7 @@ namespace SSA_Final.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? TimeFinished { get; set; }
         public DomainScanStatus Status { get; set; } = DomainScanStatus.Pending;
+        public ScanTrigger ScanTrigger { get; set; } = ScanTrigger.Manual;
         public int NumMaliciousDomains { get; set; }
         public List<DomainAnalysisResult> Variants { get; set; } = new();
     }
