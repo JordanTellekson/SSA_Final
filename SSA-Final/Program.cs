@@ -69,6 +69,13 @@ builder.Services.AddHttpClient(OpenPhishFeedSource.HttpClientName, client =>
     client.Timeout = feedTimeoutSpan;
 });
 
+// In development, the DangerousAcceptAnyServerCertificateValidator bypass is intentionally
+// enabled so the analyzer can reach domains with self-signed or expired certificates —
+// a common indicator on phishing sites. In all other environments (staging, production, demo)
+// the default OS-level certificate validation is used to prevent a known security weakness
+// from being present in assessed builds.
+bool isDevelopment = builder.Environment.IsDevelopment();
+
 // 1. NoRedirect Client
 builder.Services.AddHttpClient("DomainAnalyzer.NoRedirect", client => {
     client.Timeout = timeoutSpan;
@@ -76,7 +83,9 @@ builder.Services.AddHttpClient("DomainAnalyzer.NoRedirect", client => {
 .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     AllowAutoRedirect = false,
-    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    ServerCertificateCustomValidationCallback = isDevelopment
+        ? HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        : null
 });
 
 // 2. Follow Client
@@ -86,7 +95,9 @@ builder.Services.AddHttpClient("DomainAnalyzer.Follow", client => {
 .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     AllowAutoRedirect = true,
-    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    ServerCertificateCustomValidationCallback = isDevelopment
+        ? HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        : null
 });
 
 logger.LogInformation("Registered ISearchService -> SearchService (Singleton).");
