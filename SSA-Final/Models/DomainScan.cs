@@ -11,7 +11,7 @@ namespace SSA_Final.Models
         public DomainScanStatus Status { get; set; } = DomainScanStatus.Pending;
         public ScanTrigger ScanTrigger { get; set; } = ScanTrigger.Manual;
         public int NumMaliciousDomains { get; set; }
+        public int VariantCount { get; set; }
         public List<DomainAnalysisResult> Variants { get; set; } = new();
     }
 }
-

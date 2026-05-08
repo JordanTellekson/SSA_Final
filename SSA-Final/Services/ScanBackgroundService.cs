@@ -247,6 +247,7 @@ namespace SSA_Final.Services
                 }
 
                 scan.Variants = analysisResults;
+                scan.VariantCount = analysisResults.Count;
                 scan.NumMaliciousDomains = analysisResults.Count(r => r.IsSuspicious);
                 scan.TimeFinished = DateTime.UtcNow;
                 scan.Status = DomainScanStatus.Completed;

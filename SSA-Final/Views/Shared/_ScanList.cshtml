@@ -1,6 +1,16 @@
 ﻿@using SSA_Final.ViewModels
 @model PagedResultViewModel<DomainScan>
 
+@{
+    bool hasActiveScans = Model.Result.Items.Any(s =>
+        s.Status == DomainScanStatus.Pending || s.Status == DomainScanStatus.InProgress);
+}
+
+@if (hasActiveScans)
+{
+    <span id="active-scans-indicator" class="d-none" aria-hidden="true"></span>
+}
+
 @if (!Model.Result.Items.Any())
 {
     <p>Sorry, we couldn't find any matching results.</p>
@@ -55,7 +65,7 @@ else if (Model.ViewType == "history")
                     {
                         <span class="badge bg-success">Clean</span>
                     }
-                    <span class="text-muted small">@scan.Variants.Count variant(s)</span>
+                    <span class="text-muted small">@scan.VariantCount variant(s)</span>
                     <a asp-controller="ScanResults" asp-action="Details" asp-route-id="@scan.Id"
                            class="btn btn-sm btn-outline-primary">
                         View Scan
@@ -86,7 +96,7 @@ else
                     <td><strong>@scan.BaseDomain</strong></td>
                     <td>@scan.CreatedAt.ToLocalTime().ToString("g")</td>
                     <td>@(scan.TimeFinished?.ToLocalTime().ToString("g") ?? "—")</td>
-                    <td>@scan.Variants.Count</td>
+                    <td>@scan.VariantCount</td>
                     <td>
                         @if (scan.NumMaliciousDomains > 0)
                         {
