@@ -118,6 +118,21 @@ namespace SSA_Final.Services
                     return riskResult;
                 }
 
+                // Early-out for blocklist hits: the result already carries IsSuspicious=true,
+                // OverallRiskScore=100, and a Summary. Emit exactly one indicator and skip
+                // both AddRiskIndicators (which would add 4 duplicate signal hits + 1 more
+                // from the IsBlocklistMatch check) and the unnecessary network passes.
+                if (riskResult.IsBlocklistMatch)
+                {
+                    riskResult.Indicators = new List<string>
+                    {
+                        $"Blocklist Match: Domain found in {riskResult.BlocklistSource} feed."
+                    };
+                    riskResult.AnalysedAt = DateTime.UtcNow;
+                    riskResult.DiscoveredDomain = domain;
+                    return riskResult;
+                }
+
                 AddRiskIndicators(domain, riskResult, indicators);
 
                 // Passes 1–3 — Network checks (redirect, SSL, HTML content).

@@ -18,6 +18,10 @@ namespace SSA_Final.Services
         // Minimum pause between consecutive variant analyses to avoid hammering external services.
         private readonly int _perVariantDelayMs;
 
+        // Limits how many ProcessScanAsync tasks run concurrently, preventing the thread pool
+        // and HTTP connection pool from being exhausted when a large feed batch is queued.
+        private readonly SemaphoreSlim _concurrencyLimiter;
+
         // Retry pipeline: up to 2 retries on HttpRequestException with exponential backoff (2s, 4s).
         private readonly ResiliencePipeline _retryPipeline = new ResiliencePipelineBuilder()
             .AddRetry(new RetryStrategyOptions
@@ -47,6 +51,9 @@ namespace SSA_Final.Services
             _scopeFactory = scopeFactory;
             _logger = logger;
             _perVariantDelayMs = configuration.GetValue<int>("ScanWorker:PerVariantDelayMs", 150);
+
+            var maxConcurrent = configuration.GetValue<int>("ScanWorker:MaxConcurrentScans");
+            _concurrencyLimiter = new SemaphoreSlim(maxConcurrent > 0 ? maxConcurrent : 3);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -67,19 +74,31 @@ namespace SSA_Final.Services
             }
 
             // Main loop: process scan IDs as they arrive on the channel.
+            // WaitAsync blocks here when all concurrency slots are occupied, providing
+            // natural backpressure so the channel queue absorbs the excess rather than
+            // spawning unbounded concurrent tasks.
             await foreach (var scanId in _channelReader.ReadAllAsync(stoppingToken))
             {
-                // Fire and forget per scan so concurrent scans do not block each other.
-                // The ContinueWith acts as a safety net: if ProcessScanAsync ever throws
-                // despite its internal catch blocks, the failure is logged rather than
-                // silently swallowed by the GC.
-                _ = Task.Run(() => ProcessScanAsync(scanId, stoppingToken), stoppingToken)
-                    .ContinueWith(
-                        t => _logger.LogError(
-                            t.Exception,
+                await _concurrencyLimiter.WaitAsync(stoppingToken);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await ProcessScanAsync(scanId, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
                             "Scan {DomainScanId}: unhandled exception escaped ProcessScanAsync.",
-                            scanId),
-                        TaskContinuationOptions.OnlyOnFaulted);
+                            scanId);
+                    }
+                    finally
+                    {
+                        _concurrencyLimiter.Release();
+                    }
+                }, stoppingToken);
             }
 
             _logger.LogInformation("ScanBackgroundService stopped.");
@@ -120,20 +139,33 @@ namespace SSA_Final.Services
 
             foreach (var scan in pendingScans)
             {
-                // Same safety-net ContinueWith as the main loop.
-                _ = Task.Run(() => ProcessScanAsync(scan.Id, stoppingToken), stoppingToken)
-                    .ContinueWith(
-                        t => _logger.LogError(
-                            t.Exception,
+                await _concurrencyLimiter.WaitAsync(stoppingToken);
+
+                var scanId = scan.Id;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await ProcessScanAsync(scanId, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
                             "Scan {DomainScanId}: unhandled exception escaped ProcessScanAsync during startup drain.",
-                            scan.Id),
-                        TaskContinuationOptions.OnlyOnFaulted);
+                            scanId);
+                    }
+                    finally
+                    {
+                        _concurrencyLimiter.Release();
+                    }
+                }, stoppingToken);
             }
         }
 
         private async Task ProcessScanAsync(Guid scanId, CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Scan {DomainScanId}: picked up by background worker.", scanId);
+            _logger.LogDebug("Scan {DomainScanId}: picked up by background worker.", scanId);
 
             using var scope = _scopeFactory.CreateScope();
             var scanStore = scope.ServiceProvider.GetRequiredService<IScanStore>();
@@ -150,50 +182,72 @@ namespace SSA_Final.Services
             // Transition to InProgress.
             scan.Status = DomainScanStatus.InProgress;
             scanStore.Update(scan);
-            _logger.LogInformation("Scan {DomainScanId}: status set to InProgress.", scanId);
+            _logger.LogDebug("Scan {DomainScanId}: status set to InProgress.", scanId);
 
             try
             {
-                var variants = domainGenerator.GenerateVariations(scan.BaseDomain).ToList();
-                _logger.LogInformation(
-                    "Scan {DomainScanId}: generated {Count} variant(s) for '{Domain}'.",
-                    scanId, variants.Count, scan.BaseDomain);
+                List<DomainAnalysisResult> analysisResults;
 
-                var analysisResults = new List<DomainAnalysisResult>();
-
-                foreach (var variant in variants)
+                if (scan.ScanTrigger == ScanTrigger.Manual)
                 {
-                    stoppingToken.ThrowIfCancellationRequested();
+                    // Manual scans: generate typosquat variants and analyse each one.
+                    var variants = domainGenerator.GenerateVariations(scan.BaseDomain).ToList();
+                    _logger.LogInformation(
+                        "Scan {DomainScanId}: generated {Count} variant(s) for '{Domain}'.",
+                        scanId, variants.Count, scan.BaseDomain);
 
-                    DomainAnalysisResult result;
-                    try
+                    analysisResults = new List<DomainAnalysisResult>();
+
+                    foreach (var variant in variants)
                     {
-                        result = await _retryPipeline.ExecuteAsync(
-                            async ct => await domainAnalyzer.Analyze(variant),
-                            stoppingToken);
+                        stoppingToken.ThrowIfCancellationRequested();
+
+                        DomainAnalysisResult result;
+                        try
+                        {
+                            result = await _retryPipeline.ExecuteAsync(
+                                async ct => await domainAnalyzer.Analyze(variant),
+                                stoppingToken);
+                        }
+                        catch (HttpRequestException ex)
+                        {
+                            // All retries exhausted for this variant — log and skip rather than
+                            // failing the entire scan over a single unresolvable domain.
+                            _logger.LogWarning(
+                                ex,
+                                "Scan {DomainScanId}: variant '{Variant}' skipped after all retries exhausted.",
+                                scanId, variant);
+                            continue;
+                        }
+
+                        result.DomainScanId = scanId;
+                        analysisResults.Add(result);
+
+                        // Throttle between variant analyses to avoid overwhelming external services.
+                        if (_perVariantDelayMs > 0)
+                        {
+                            await Task.Delay(_perVariantDelayMs, stoppingToken);
+                        }
                     }
-                    catch (HttpRequestException ex)
-                    {
-                        // All retries exhausted for this variant — log and skip rather than
-                        // failing the entire scan over a single unresolvable domain.
-                        _logger.LogWarning(
-                            ex,
-                            "Scan {DomainScanId}: variant '{Variant}' skipped after all retries exhausted.",
-                            scanId, variant);
-                        continue;
-                    }
+                }
+                else
+                {
+                    // FeedIngestion / Scheduled: the domain is already a suspected phishing domain
+                    // sourced externally — skip variant generation and analyse it directly.
+                    _logger.LogDebug(
+                        "Scan {DomainScanId}: trigger is {Trigger} — analysing '{Domain}' directly (no variant generation).",
+                        scanId, scan.ScanTrigger, scan.BaseDomain);
+
+                    var result = await _retryPipeline.ExecuteAsync(
+                        async ct => await domainAnalyzer.Analyze(scan.BaseDomain),
+                        stoppingToken);
 
                     result.DomainScanId = scanId;
-                    analysisResults.Add(result);
-
-                    // Throttle between variant analyses to avoid overwhelming external services.
-                    if (_perVariantDelayMs > 0)
-                    {
-                        await Task.Delay(_perVariantDelayMs, stoppingToken);
-                    }
+                    analysisResults = new List<DomainAnalysisResult> { result };
                 }
 
                 scan.Variants = analysisResults;
+                scan.VariantCount = analysisResults.Count;
                 scan.NumMaliciousDomains = analysisResults.Count(r => r.IsSuspicious);
                 scan.TimeFinished = DateTime.UtcNow;
                 scan.Status = DomainScanStatus.Completed;

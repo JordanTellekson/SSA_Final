@@ -44,6 +44,7 @@ builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
+builder.Services.AddSingleton<IDomainFeedSource, OpenPhishFeedSource>();
 
 
 // Scan background job infrastructure: register an unbounded channel and expose both
@@ -56,9 +57,24 @@ var scanChannel = Channel.CreateUnbounded<Guid>(new UnboundedChannelOptions
 builder.Services.AddSingleton(scanChannel.Writer);
 builder.Services.AddSingleton(scanChannel.Reader);
 builder.Services.AddHostedService<ScanBackgroundService>();
+builder.Services.AddHostedService<FeedIngestionBackgroundService>();
 
 var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
 var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
+
+var feedTimeoutSeconds = builder.Configuration.GetValue<int>("FeedSources:OpenPhish:TimeoutSeconds");
+var feedTimeoutSpan = TimeSpan.FromSeconds(feedTimeoutSeconds > 0 ? feedTimeoutSeconds : 30);
+builder.Services.AddHttpClient(OpenPhishFeedSource.HttpClientName, client =>
+{
+    client.Timeout = feedTimeoutSpan;
+});
+
+// In development, the DangerousAcceptAnyServerCertificateValidator bypass is intentionally
+// enabled so the analyzer can reach domains with self-signed or expired certificates —
+// a common indicator on phishing sites. In all other environments (staging, production, demo)
+// the default OS-level certificate validation is used to prevent a known security weakness
+// from being present in assessed builds.
+bool isDevelopment = builder.Environment.IsDevelopment();
 
 // 1. NoRedirect Client
 builder.Services.AddHttpClient("DomainAnalyzer.NoRedirect", client => {
@@ -67,7 +83,9 @@ builder.Services.AddHttpClient("DomainAnalyzer.NoRedirect", client => {
 .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     AllowAutoRedirect = false,
-    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    ServerCertificateCustomValidationCallback = isDevelopment
+        ? HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        : null
 });
 
 // 2. Follow Client
@@ -77,7 +95,9 @@ builder.Services.AddHttpClient("DomainAnalyzer.Follow", client => {
 .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     AllowAutoRedirect = true,
-    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    ServerCertificateCustomValidationCallback = isDevelopment
+        ? HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        : null
 });
 
 logger.LogInformation("Registered ISearchService -> SearchService (Singleton).");
@@ -85,9 +105,11 @@ logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Sc
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
-logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow.");
+logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Singleton).");
+logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, FeedSource.OpenPhish.");
 logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
 logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
+logger.LogInformation("Registered FeedIngestionBackgroundService (IHostedService).");
 
 // Configure Identity
 builder.Services.AddDefaultIdentity<IdentityUser>(options =>

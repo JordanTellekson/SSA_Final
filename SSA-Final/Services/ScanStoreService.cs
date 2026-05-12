@@ -121,6 +121,21 @@ namespace SSA_Final.Services
             }
         }
 
+        public Task<bool> WasRecentlyScannedAsync(string domain, TimeSpan window)
+        {
+            var normalizedDomain = domain.Trim().ToLowerInvariant();
+            var cutoff = DateTime.UtcNow - window;
+
+            lock (_lock)
+            {
+                var result = _scans.Any(s =>
+                    s.BaseDomain == normalizedDomain &&
+                    s.CreatedAt >= cutoff);
+
+                return Task.FromResult(result);
+            }
+        }
+
         public Task<IReadOnlyList<DomainAnalysisResult>> GetVariantsAsync(
             Guid scanId,
             VariantQuery query)

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SSA_Final.Data;
 
@@ -11,9 +12,11 @@ using SSA_Final.Data;
 namespace SSA_Final.Migrations
 {
     [DbContext(typeof(SSA_FinalContext))]
-    partial class SSA_FinalContextModelSnapshot : ModelSnapshot
+    [Migration("20260507170041_AddScanTrigger")]
+    partial class AddScanTrigger
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -282,9 +285,6 @@ namespace SSA_Final.Migrations
 
                     b.Property<DateTime?>("TimeFinished")
                         .HasColumnType("datetime2");
-
-                    b.Property<int>("VariantCount")
-                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
