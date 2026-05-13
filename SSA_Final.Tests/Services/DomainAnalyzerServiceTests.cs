@@ -115,12 +115,23 @@ public class DomainAnalyzerServiceTests
 {
     // ── Builder helpers ───────────────────────────────────────────────────────
 
-    private static IConfiguration BuildConfig(int timeoutSeconds = 5)
+    private static IConfiguration BuildConfig(
+        int timeoutSeconds = 5,
+        Dictionary<string, string?>? configOverrides = null)
     {
         var dict = new Dictionary<string, string?>
         {
             ["DomainAnalyzer:TimeoutSeconds"] = timeoutSeconds.ToString()
         };
+
+        if (configOverrides is not null)
+        {
+            foreach (var item in configOverrides)
+            {
+                dict[item.Key] = item.Value;
+            }
+        }
+
         return new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
     }
 
@@ -133,6 +144,27 @@ public class DomainAnalyzerServiceTests
         return msg;
     }
 
+    private static IReadOnlyList<string> LoadDomainList(string fileName)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, fileName);
+            if (File.Exists(candidate))
+            {
+                return File.ReadLines(candidate)
+                    .Select(line => line.Trim())
+                    .Where(line => !string.IsNullOrWhiteSpace(line) && !line.StartsWith('#'))
+                    .ToList();
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find {fileName} from test output path.");
+    }
+
     /// <summary>
     /// Creates a <see cref="DomainAnalyzerService"/> wired to fake collaborators.
     /// Unspecified parameters default to clean / non-suspicious responses.
@@ -142,7 +174,8 @@ public class DomainAnalyzerServiceTests
         Func<HttpRequestMessage, HttpResponseMessage>? followResponder = null,
         ISslCertificateChecker? sslChecker = null,
         IDomainRegistrationLookupService? registrationLookup = null,
-        int timeoutSeconds = 5)
+        int timeoutSeconds = 5,
+        Dictionary<string, string?>? configOverrides = null)
     {
         noRedirectResponder ??= _ => new HttpResponseMessage(HttpStatusCode.OK);
         followResponder ??= _ => OkHtml("<html><head><title>My Site</title></head><body></body></html>");
@@ -155,7 +188,7 @@ public class DomainAnalyzerServiceTests
         return new DomainAnalyzerService(
             factory,
             sslChecker,
-            BuildConfig(timeoutSeconds),
+            BuildConfig(timeoutSeconds, configOverrides),
             NullLogger<DomainAnalyzerService>.Instance,
             null,
             null,
@@ -632,6 +665,103 @@ public class DomainAnalyzerServiceTests
         var result = await svc.Analyze("example.com");
 
         Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_CustomSuspiciousMinScore_DoesNotFlagLowScores()
+    {
+        var svc = Build(configOverrides: new Dictionary<string, string?>
+        {
+            ["RiskThresholds:SuspiciousMinScore"] = "25"
+        });
+
+        var result = await svc.AnalyzeDomainRiskAsync("my-bank.com");
+
+        Assert.InRange(result.OverallRiskScore, 1, 24);
+        Assert.False(result.IsSuspicious);
+        Assert.Contains("below suspicious threshold", result.Summary);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_CustomSignalScore_UsesConfiguredValue()
+    {
+        var svc = Build(configOverrides: new Dictionary<string, string?>
+        {
+            ["RiskThresholds:HyphenAbuse:OneHyphen"] = "23"
+        });
+
+        var result = await svc.AnalyzeDomainRiskAsync("my-bank.com");
+
+        Assert.Equal(23, result.HyphenAbuse?.Score);
+        Assert.Equal(23, result.OverallRiskScore);
+        Assert.True(result.IsSuspicious);
+    }
+
+    // ── Risk classification labels ───────────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, "Low")]
+    [InlineData(24, "Low")]
+    [InlineData(25, "Medium")]
+    [InlineData(49, "Medium")]
+    [InlineData(50, "High")]
+    [InlineData(74, "High")]
+    [InlineData(75, "Critical")]
+    [InlineData(100, "Critical")]
+    public void ClassifyRiskScore_MapsBoundariesToExpectedLabels(
+        int score,
+        string expectedClassification)
+    {
+        Assert.Equal(expectedClassification, DomainAnalysisResult.ClassifyRiskScore(score));
+    }
+
+    [Theory]
+    [InlineData("google.com", "Low")]
+    [InlineData("secure-paypal.com", "Low")]
+    [InlineData("secure-login-account-update.com", "Medium")]
+    [InlineData("account.verify.paypa1-login-secure-update.com", "High")]
+    public async Task AnalyzeDomainRisk_ReferenceDomains_ClassifiesExpectedBands(
+        string domain,
+        string expectedClassification)
+    {
+        var svc = Build();
+
+        var result = await svc.AnalyzeDomainRiskAsync(domain);
+
+        Assert.Equal(expectedClassification, result.RiskClassification);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_ReferenceRecentlyRegisteredDomain_ClassifiesCritical()
+    {
+        var svc = Build(registrationLookup: new FakeDomainRegistrationLookupService(
+            new DomainRegistrationMetadata
+            {
+                IsLookupSuccessful = true,
+                CreationDateUtc = DateTime.UtcNow.AddDays(-10),
+                ExpirationDateUtc = DateTime.UtcNow.AddDays(355),
+                HasPrivacyProtection = true
+            }));
+
+        var result = await svc.AnalyzeDomainRiskAsync("account.verify.paypa1-login-secure-update.com");
+
+        Assert.Equal("Critical", result.RiskClassification);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_LegitimateDomainList_DoesNotClassifyHighOrCritical()
+    {
+        var safeDomains = LoadDomainList("Legitimate_Domains.txt");
+        var svc = Build();
+
+        foreach (var domain in safeDomains)
+        {
+            var result = await svc.AnalyzeDomainRiskAsync(domain);
+
+            Assert.True(
+                result.RiskClassification is "Low" or "Medium",
+                $"{domain} classified as {result.RiskClassification} with score {result.OverallRiskScore}.");
+        }
     }
 }
 

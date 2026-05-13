@@ -247,6 +247,10 @@ namespace SSA_Final.Migrations
                     b.Property<bool>("IsSuspicious")
                         .HasColumnType("bit");
 
+                    b.Property<string>("RiskClassification")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Summary")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");

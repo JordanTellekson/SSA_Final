@@ -19,6 +19,11 @@ namespace SSA_Final.Models
         public bool IsSuspicious { get; set; }
 
         /// <summary>
+        /// Named classification for the numeric risk score.
+        /// </summary>
+        public string RiskClassification { get; set; } = ClassifyRiskScore(0);
+
+        /// <summary>
         /// A human-readable summary produced by the analyser.
         /// Empty when no issues are detected.
         /// </summary>
@@ -155,6 +160,30 @@ namespace SSA_Final.Models
         /// </summary>
         [NotMapped]
         public bool UsedBlocklistFallback { get; set; }
+
+        public static string ClassifyRiskScore(int riskScore)
+        {
+            var normalizedScore = Math.Clamp(riskScore, 0, 100);
+
+            return normalizedScore switch
+            {
+                <= 24 => "Low",
+                <= 49 => "Medium",
+                <= 74 => "High",
+                _ => "Critical"
+            };
+        }
+
+        public static string NormalizeRiskClassification(string? riskClassification)
+        {
+            return riskClassification switch
+            {
+                "Medium" => "Medium",
+                "High" => "High",
+                "Critical" => "Critical",
+                _ => "Low"
+            };
+        }
     }
 }
 

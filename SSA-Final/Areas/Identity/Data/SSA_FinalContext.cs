@@ -37,6 +37,7 @@ public class SSA_FinalContext : IdentityDbContext<IdentityUser>
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.DiscoveredDomain).IsRequired();
+            entity.Property(x => x.RiskClassification).IsRequired();
             entity.Property(x => x.Summary).IsRequired();
             entity.PrimitiveCollection(x => x.Indicators);
         });
