@@ -6,6 +6,14 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 
     bool isActive = Model.Status == DomainScanStatus.Pending || Model.Status == DomainScanStatus.InProgress;
+
+    string ClassificationBadgeClass(string classification) => classification switch
+    {
+        "Critical" => "bg-dark",
+        "High" => "bg-danger",
+        "Medium" => "bg-warning text-dark",
+        _ => "bg-success"
+    };
 }
 
 <div class="d-flex align-items-center gap-3 mb-3">
@@ -83,6 +91,7 @@ else
             <tr>
                 <th>Discovered Domain</th>
                 <th>Status</th>
+                <th>Classification</th>
                 <th>Summary</th>
                 <th>Indicators</th>
                 <th>Analyzed At</th>
@@ -102,6 +111,11 @@ else
                         {
                             <span class="badge bg-success">Safe</span>
                         }
+                    </td>
+                    <td>
+                        <span class="badge @ClassificationBadgeClass(variant.RiskClassification)">
+                            @variant.RiskClassification
+                        </span>
                     </td>
                     <td>@variant.Summary</td>
                     <td>

@@ -1,0 +1,38 @@
+flowchart LR
+    User[Authenticated user]
+    Dashboard[DashboardController]
+    Reports[ReportsController]
+    Channel[Channel<Guid> scan queue]
+    Worker[ScanBackgroundService]
+    Generator[DomainGeneratorService]
+    Analyzer[DomainAnalyzerService]
+    Blocklist[PhishingBlocklistService]
+    SSL[SslCertificateChecker]
+    RDAP[RdapDomainRegistrationLookupService]
+    Feed[FeedIngestionBackgroundService]
+    FeedSource[OpenPhishFeedSource]
+    ReportService[ReportService]
+    Store[SqlScanStoreService]
+    SQL[(SQL Server)]
+
+    User -->|Submit manual scan| Dashboard
+    Dashboard -->|Create pending DomainScan| Store
+    Dashboard -->|Write scan id| Channel
+    Channel -->|Read scan id| Worker
+    Worker -->|Manual scans| Generator
+    Generator -->|Domain variants| Worker
+    Worker -->|Analyze variants or direct feed hit| Analyzer
+    Analyzer --> Blocklist
+    Analyzer --> SSL
+    Analyzer --> RDAP
+    Worker -->|Persist status and variant results| Store
+    Store --> SQL
+
+    Feed -->|Poll feed| FeedSource
+    Feed -->|Skip recently scanned domains| Store
+    Feed -->|Queue feed scans| Channel
+
+    User -->|Generate report| Reports
+    Reports --> ReportService
+    ReportService -->|Query completed high-risk scans| Store
+    ReportService -->|JSON or CSV| Reports

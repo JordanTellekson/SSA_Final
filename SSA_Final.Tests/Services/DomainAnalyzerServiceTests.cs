@@ -4,6 +4,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using SSA_Final.Interfaces;
+using SSA_Final.Models;
 using SSA_Final.Services;
 using System.Net;
 using System.Text;
@@ -80,18 +81,57 @@ internal sealed class FakeSslCertificateChecker : ISslCertificateChecker
         => Task.FromResult(_indicators);
 }
 
+/// <summary>
+/// Fake registration lookup service so registration-age, lifespan, and privacy
+/// scoring can be tested without external RDAP/WHOIS calls.
+/// </summary>
+internal sealed class FakeDomainRegistrationLookupService : IDomainRegistrationLookupService
+{
+    private readonly DomainRegistrationMetadata _metadata;
+
+    public FakeDomainRegistrationLookupService(DomainRegistrationMetadata metadata)
+        => _metadata = metadata;
+
+    public Task<DomainRegistrationMetadata> LookupAsync(
+        string domain,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new DomainRegistrationMetadata
+        {
+            Domain = domain,
+            CreationDateUtc = _metadata.CreationDateUtc,
+            ExpirationDateUtc = _metadata.ExpirationDateUtc,
+            RegistrarName = _metadata.RegistrarName,
+            HasPrivacyProtection = _metadata.HasPrivacyProtection,
+            IsLookupSuccessful = _metadata.IsLookupSuccessful,
+            FailureReason = _metadata.FailureReason
+        });
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 public class DomainAnalyzerServiceTests
 {
     // ── Builder helpers ───────────────────────────────────────────────────────
 
-    private static IConfiguration BuildConfig(int timeoutSeconds = 5)
+    private static IConfiguration BuildConfig(
+        int timeoutSeconds = 5,
+        Dictionary<string, string?>? configOverrides = null)
     {
         var dict = new Dictionary<string, string?>
         {
             ["DomainAnalyzer:TimeoutSeconds"] = timeoutSeconds.ToString()
         };
+
+        if (configOverrides is not null)
+        {
+            foreach (var item in configOverrides)
+            {
+                dict[item.Key] = item.Value;
+            }
+        }
+
         return new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
     }
 
@@ -104,6 +144,27 @@ public class DomainAnalyzerServiceTests
         return msg;
     }
 
+    private static IReadOnlyList<string> LoadDomainList(string fileName)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, fileName);
+            if (File.Exists(candidate))
+            {
+                return File.ReadLines(candidate)
+                    .Select(line => line.Trim())
+                    .Where(line => !string.IsNullOrWhiteSpace(line) && !line.StartsWith('#'))
+                    .ToList();
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find {fileName} from test output path.");
+    }
+
     /// <summary>
     /// Creates a <see cref="DomainAnalyzerService"/> wired to fake collaborators.
     /// Unspecified parameters default to clean / non-suspicious responses.
@@ -112,7 +173,9 @@ public class DomainAnalyzerServiceTests
         Func<HttpRequestMessage, HttpResponseMessage>? noRedirectResponder = null,
         Func<HttpRequestMessage, HttpResponseMessage>? followResponder = null,
         ISslCertificateChecker? sslChecker = null,
-        int timeoutSeconds = 5)
+        IDomainRegistrationLookupService? registrationLookup = null,
+        int timeoutSeconds = 5,
+        Dictionary<string, string?>? configOverrides = null)
     {
         noRedirectResponder ??= _ => new HttpResponseMessage(HttpStatusCode.OK);
         followResponder ??= _ => OkHtml("<html><head><title>My Site</title></head><body></body></html>");
@@ -125,8 +188,11 @@ public class DomainAnalyzerServiceTests
         return new DomainAnalyzerService(
             factory,
             sslChecker,
-            BuildConfig(timeoutSeconds),
-            NullLogger<DomainAnalyzerService>.Instance);
+            BuildConfig(timeoutSeconds, configOverrides),
+            NullLogger<DomainAnalyzerService>.Instance,
+            null,
+            null,
+            registrationLookup);
     }
 
     // ── Null / empty input ────────────────────────────────────────────────────
@@ -150,13 +216,14 @@ public class DomainAnalyzerServiceTests
     [InlineData("192.168.1.1")]
     [InlineData("10.0.0.1")]
     [InlineData("203.0.113.42")]
-    public async Task Analyze_IpAddressDomain_AddsIpIndicator(string domain)
+    public async Task Analyze_IpAddressDomain_ReturnsInvalidResult(string domain)
     {
         var svc = Build();
         var result = await svc.Analyze(domain);
 
-        Assert.Contains(result.Indicators, i => i.Contains("IP address"));
-        Assert.True(result.IsSuspicious);
+        Assert.False(result.IsValidDomain);
+        Assert.False(result.IsSuspicious);
+        Assert.Empty(result.Indicators);
     }
 
     // ── Pass 0: Static checks — excessive subdomains ──────────────────────────
@@ -167,7 +234,7 @@ public class DomainAnalyzerServiceTests
         var svc = Build();
         var result = await svc.Analyze("login.secure.verify.paypal.com");
 
-        Assert.Contains(result.Indicators, i => i.Contains("Excessive subdomains"));
+        Assert.Contains(result.Indicators, i => i.Contains("Excessive Subdomains"));
     }
 
     [Fact]
@@ -176,7 +243,7 @@ public class DomainAnalyzerServiceTests
         var svc = Build();
         var result = await svc.Analyze("mail.example.com");
 
-        Assert.DoesNotContain(result.Indicators, i => i.Contains("Excessive subdomains"));
+        Assert.DoesNotContain(result.Indicators, i => i.Contains("Excessive Subdomains"));
     }
 
     // ── Pass 0: Static checks — hyphen abuse ──────────────────────────────────
@@ -189,35 +256,36 @@ public class DomainAnalyzerServiceTests
         var svc = Build();
         var result = await svc.Analyze(domain);
 
-        Assert.Contains(result.Indicators, i => i.Contains("Hyphen abuse"));
+        Assert.Contains(result.Indicators, i => i.Contains("Hyphen Abuse"));
     }
 
     [Theory]
-    [InlineData("secure-paypal.com", "secure-")]
-    [InlineData("login-mybank.net", "login-")]
-    [InlineData("verify-account.org", "verify-")]
-    [InlineData("confirm-email.com", "confirm-")]
-    public async Task Analyze_SuspiciousPrefix_AddsIndicator(string domain, string prefix)
+    [InlineData("secure-paypal.com", "secure")]
+    [InlineData("login-mybank.net", "login")]
+    [InlineData("verify-account.org", "account")]
+    [InlineData("confirm-email.com", "confirm")]
+    public async Task Analyze_PhishingKeyword_AddsKeywordAbuseIndicator(string domain, string keyword)
     {
         var svc = Build();
         var result = await svc.Analyze(domain);
 
-        Assert.Contains(result.Indicators, i => i.Contains(prefix));
+        Assert.Contains(result.Indicators,
+            i => i.Contains("Keyword Abuse") && i.Contains(keyword));
     }
 
-    // ── Pass 0: Static checks — suspicious TLD ───────────────────────────────
+    // ── Pass 0: Static checks — TLDs are not list-scored ─────────────────────
 
     [Theory]
-    [InlineData("mybank.xyz", ".xyz")]
-    [InlineData("paypal.tk", ".tk")]
-    [InlineData("google.top", ".top")]
-    [InlineData("microsoft.ru", ".ru")]
-    public async Task Analyze_SuspiciousTld_AddsIndicator(string domain, string tld)
+    [InlineData("mybank.xyz")]
+    [InlineData("paypal.tk")]
+    [InlineData("google.top")]
+    [InlineData("microsoft.ru")]
+    public async Task Analyze_TldOnly_DoesNotAddListBasedTldIndicator(string domain)
     {
         var svc = Build();
         var result = await svc.Analyze(domain);
 
-        Assert.Contains(result.Indicators, i => i.Contains(tld));
+        Assert.DoesNotContain(result.Indicators, i => i.Contains("TLD"));
     }
 
     [Fact]
@@ -229,15 +297,15 @@ public class DomainAnalyzerServiceTests
         Assert.DoesNotContain(result.Indicators, i => i.Contains("TLD"));
     }
 
-    // ── Pass 0: Static checks — brand keyword stuffing ───────────────────────
+    // ── Pass 0: Static checks — brand stuffing is no longer a separate signal ─
 
     [Fact]
-    public async Task Analyze_TwoBrandsInDomain_AddsBrandStuffingIndicator()
+    public async Task Analyze_TwoBrandsInDomain_DoesNotAddRetiredBrandStuffingIndicator()
     {
         var svc = Build();
         var result = await svc.Analyze("paypal-amazon-security.com");
 
-        Assert.Contains(result.Indicators, i => i.Contains("Brand keyword stuffing"));
+        Assert.DoesNotContain(result.Indicators, i => i.Contains("Brand keyword stuffing"));
     }
 
     [Fact]
@@ -259,6 +327,87 @@ public class DomainAnalyzerServiceTests
 
         Assert.False(result.IsSuspicious);
         Assert.Empty(result.Indicators);
+    }
+
+    // ── Pass 0: Registration metadata checks ────────────────────────────────
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_RecentlyRegisteredDomain_AddsHighAgeSignal()
+    {
+        var svc = Build(registrationLookup: new FakeDomainRegistrationLookupService(
+            new DomainRegistrationMetadata
+            {
+                IsLookupSuccessful = true,
+                CreationDateUtc = DateTime.UtcNow.AddDays(-10),
+                ExpirationDateUtc = DateTime.UtcNow.AddDays(355)
+            }));
+
+        var result = await svc.AnalyzeDomainRiskAsync("freshdomain.com");
+
+        Assert.True(result.DomainRegistrationAge?.Triggered);
+        Assert.Equal(25, result.DomainRegistrationAge?.Score);
+        Assert.Contains("registered", result.DomainRegistrationAge?.Detail);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_ShortRegistrationLifespan_AddsLifespanSignal()
+    {
+        var createdAt = DateTime.UtcNow.AddDays(-500);
+        var svc = Build(registrationLookup: new FakeDomainRegistrationLookupService(
+            new DomainRegistrationMetadata
+            {
+                IsLookupSuccessful = true,
+                CreationDateUtc = createdAt,
+                ExpirationDateUtc = createdAt.AddDays(365)
+            }));
+
+        var result = await svc.AnalyzeDomainRiskAsync("lifespandomain.com");
+
+        Assert.True(result.DomainRegistrationLifespan?.Triggered);
+        Assert.Equal(10, result.DomainRegistrationLifespan?.Score);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_PrivacyProtectedWhois_AddsWeakPrivacySignal()
+    {
+        var svc = Build(registrationLookup: new FakeDomainRegistrationLookupService(
+            new DomainRegistrationMetadata
+            {
+                IsLookupSuccessful = true,
+                HasPrivacyProtection = true
+            }));
+
+        var result = await svc.AnalyzeDomainRiskAsync("privacydomain.com");
+
+        Assert.True(result.WhoisPrivacyProtection?.Triggered);
+        Assert.Equal(5, result.WhoisPrivacyProtection?.Score);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_RegistrationLookupFailure_NotesReasonWithoutScoring()
+    {
+        var svc = Build(registrationLookup: new FakeDomainRegistrationLookupService(
+            new DomainRegistrationMetadata
+            {
+                IsLookupSuccessful = false,
+                FailureReason = "RDAP rate limited"
+            }));
+
+        var result = await svc.AnalyzeDomainRiskAsync("safeexample.com");
+
+        Assert.Equal("RDAP rate limited", result.RegistrationLookupFailureReason);
+        Assert.False(result.DomainRegistrationAge?.Triggered);
+        Assert.Equal(0, result.DomainRegistrationAge?.Score);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_CharacterCompositionAnomaly_AddsDataDerivedSignal()
+    {
+        var svc = Build();
+        var result = await svc.AnalyzeDomainRiskAsync("a9x2k123456.com");
+
+        Assert.True(result.CharacterCompositionAnomaly?.Triggered);
+        Assert.Contains("digit ratio", result.CharacterCompositionAnomaly?.Detail);
     }
 
     // ── Pass 1: Cross-domain redirect ─────────────────────────────────────────
@@ -383,7 +532,7 @@ public class DomainAnalyzerServiceTests
     {
         const string html = "<html><head><title>PayPal - Secure Login</title></head></html>";
         var svc = Build(followResponder: _ => OkHtml(html));
-        var result = await svc.Analyze("totallynotpaypal.com");
+        var result = await svc.Analyze("example.com");
 
         Assert.Contains(result.Indicators, i => i.Contains("Brand keyword mismatch"));
     }
@@ -516,6 +665,103 @@ public class DomainAnalyzerServiceTests
         var result = await svc.Analyze("example.com");
 
         Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_CustomSuspiciousMinScore_DoesNotFlagLowScores()
+    {
+        var svc = Build(configOverrides: new Dictionary<string, string?>
+        {
+            ["RiskThresholds:SuspiciousMinScore"] = "25"
+        });
+
+        var result = await svc.AnalyzeDomainRiskAsync("my-bank.com");
+
+        Assert.InRange(result.OverallRiskScore, 1, 24);
+        Assert.False(result.IsSuspicious);
+        Assert.Contains("below suspicious threshold", result.Summary);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_CustomSignalScore_UsesConfiguredValue()
+    {
+        var svc = Build(configOverrides: new Dictionary<string, string?>
+        {
+            ["RiskThresholds:HyphenAbuse:OneHyphen"] = "23"
+        });
+
+        var result = await svc.AnalyzeDomainRiskAsync("my-bank.com");
+
+        Assert.Equal(23, result.HyphenAbuse?.Score);
+        Assert.Equal(23, result.OverallRiskScore);
+        Assert.True(result.IsSuspicious);
+    }
+
+    // ── Risk classification labels ───────────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, "Low")]
+    [InlineData(24, "Low")]
+    [InlineData(25, "Medium")]
+    [InlineData(49, "Medium")]
+    [InlineData(50, "High")]
+    [InlineData(74, "High")]
+    [InlineData(75, "Critical")]
+    [InlineData(100, "Critical")]
+    public void ClassifyRiskScore_MapsBoundariesToExpectedLabels(
+        int score,
+        string expectedClassification)
+    {
+        Assert.Equal(expectedClassification, DomainAnalysisResult.ClassifyRiskScore(score));
+    }
+
+    [Theory]
+    [InlineData("google.com", "Low")]
+    [InlineData("secure-paypal.com", "Low")]
+    [InlineData("secure-login-account-update.com", "Medium")]
+    [InlineData("account.verify.paypa1-login-secure-update.com", "High")]
+    public async Task AnalyzeDomainRisk_ReferenceDomains_ClassifiesExpectedBands(
+        string domain,
+        string expectedClassification)
+    {
+        var svc = Build();
+
+        var result = await svc.AnalyzeDomainRiskAsync(domain);
+
+        Assert.Equal(expectedClassification, result.RiskClassification);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_ReferenceRecentlyRegisteredDomain_ClassifiesCritical()
+    {
+        var svc = Build(registrationLookup: new FakeDomainRegistrationLookupService(
+            new DomainRegistrationMetadata
+            {
+                IsLookupSuccessful = true,
+                CreationDateUtc = DateTime.UtcNow.AddDays(-10),
+                ExpirationDateUtc = DateTime.UtcNow.AddDays(355),
+                HasPrivacyProtection = true
+            }));
+
+        var result = await svc.AnalyzeDomainRiskAsync("account.verify.paypa1-login-secure-update.com");
+
+        Assert.Equal("Critical", result.RiskClassification);
+    }
+
+    [Fact]
+    public async Task AnalyzeDomainRisk_LegitimateDomainList_DoesNotClassifyHighOrCritical()
+    {
+        var safeDomains = LoadDomainList("Legitimate_Domains.txt");
+        var svc = Build();
+
+        foreach (var domain in safeDomains)
+        {
+            var result = await svc.AnalyzeDomainRiskAsync(domain);
+
+            Assert.True(
+                result.RiskClassification is "Low" or "Medium",
+                $"{domain} classified as {result.RiskClassification} with score {result.OverallRiskScore}.");
+        }
     }
 }
 
