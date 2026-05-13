@@ -60,6 +60,7 @@ builder.Services.AddSingleton(scanChannel.Writer);
 builder.Services.AddSingleton(scanChannel.Reader);
 builder.Services.AddHostedService<ScanBackgroundService>();
 builder.Services.AddHostedService<FeedIngestionBackgroundService>();
+builder.Services.AddHostedService<ScheduledScanBackgroundService>();
 
 var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
 var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
@@ -121,6 +122,7 @@ logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, 
 logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
 logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
 logger.LogInformation("Registered FeedIngestionBackgroundService (IHostedService).");
+logger.LogInformation("Registered ScheduledScanBackgroundService (IHostedService).");
 
 // Configure Identity
 builder.Services.AddDefaultIdentity<IdentityUser>(options =>

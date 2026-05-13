@@ -188,13 +188,14 @@ namespace SSA_Final.Services
             {
                 List<DomainAnalysisResult> analysisResults;
 
-                if (scan.ScanTrigger == ScanTrigger.Manual)
+                if (scan.ScanTrigger is ScanTrigger.Manual or ScanTrigger.Scheduled)
                 {
-                    // Manual scans: generate typosquat variants and analyse each one.
+                    // Manual and scheduled brand scans generate typosquat variants
+                    // and analyse each one. Feed ingestion stays direct below.
                     var variants = domainGenerator.GenerateVariations(scan.BaseDomain).ToList();
                     _logger.LogInformation(
-                        "Scan {DomainScanId}: generated {Count} variant(s) for '{Domain}'.",
-                        scanId, variants.Count, scan.BaseDomain);
+                        "Scan {DomainScanId}: generated {Count} variant(s) for '{Domain}' ({Trigger}).",
+                        scanId, variants.Count, scan.BaseDomain, scan.ScanTrigger);
 
                     analysisResults = new List<DomainAnalysisResult>();
 
@@ -232,8 +233,8 @@ namespace SSA_Final.Services
                 }
                 else
                 {
-                    // FeedIngestion / Scheduled: the domain is already a suspected phishing domain
-                    // sourced externally — skip variant generation and analyse it directly.
+                    // Feed ingestion domains are already suspected phishing domains sourced
+                    // externally, so skip variant generation and analyse them directly.
                     _logger.LogDebug(
                         "Scan {DomainScanId}: trigger is {Trigger} — analysing '{Domain}' directly (no variant generation).",
                         scanId, scan.ScanTrigger, scan.BaseDomain);

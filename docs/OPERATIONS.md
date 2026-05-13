@@ -60,6 +60,9 @@ Configuration is stored in `SSA-Final/appsettings.json` and environment-specific
 | `FeedIngestion:MaxDomainsPerCycle` | Maximum feed domains queued per ingestion cycle. |
 | `FeedIngestion:StartupDelaySeconds` | Delay after app startup before the first feed ingestion cycle. |
 | `Reports:HighRiskLookbackHours` | Default lookback window for `/Reports/Generate`. |
+| `MonitoredBrands:Domains` | Brand domains that scheduled monitoring queues for full variant scans. |
+| `MonitoredBrands:ScanIntervalHours` | How often monitored brand domains are eligible to be scanned again. |
+| `MonitoredBrands:StartupDelaySeconds` | Delay after app startup before the first scheduled brand monitoring cycle. |
 
 ## Applying Migrations
 
@@ -100,6 +103,13 @@ High-risk reports:
 
 Reports include completed scans in the lookback window where `NumMaliciousDomains > 0`.
 
+Scheduled monitoring:
+
+- The `ScheduledScanBackgroundService` starts after the app signals `ApplicationStarted`.
+- It queues each configured `MonitoredBrands:Domains` entry unless it was scanned inside `MonitoredBrands:ScanIntervalHours`.
+- Scheduled scans use `ScanTrigger = Scheduled` and generate full typosquat variants like manual scans.
+- The scan trigger is visible in scan history and scan details.
+
 ## Analyst Playbook
 
 1. Start with `RiskClassification` and `OverallRiskScore`.
@@ -119,6 +129,7 @@ Reports include completed scans in the lookback window where `NumMaliciousDomain
 - The analyzer focuses on domain and lightweight page signals. It does not sandbox JavaScript, submit forms, inspect screenshots, or follow complex redirect chains.
 - Historical rows created before reportable risk fields were added may not have `TopRiskSignal`, `OverallRiskScore`, or blocklist metadata populated.
 - Feed ingestion depends on external feed availability and local cache freshness.
+- Scheduled monitoring only covers domains listed in `MonitoredBrands:Domains`; it is not a replacement for analyst-submitted scans or external feed ingestion.
 
 ## Demo Review Checklist
 

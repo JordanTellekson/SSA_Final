@@ -11,6 +11,8 @@ flowchart LR
     RDAP[RdapDomainRegistrationLookupService]
     Feed[FeedIngestionBackgroundService]
     FeedSource[OpenPhishFeedSource]
+    Scheduler[ScheduledScanBackgroundService]
+    Config[appsettings.json]
     ReportService[ReportService]
     Store[SqlScanStoreService]
     SQL[(SQL Server)]
@@ -31,6 +33,10 @@ flowchart LR
     Feed -->|Poll feed| FeedSource
     Feed -->|Skip recently scanned domains| Store
     Feed -->|Queue feed scans| Channel
+
+    Config -->|MonitoredBrands| Scheduler
+    Scheduler -->|Skip recently scanned brands| Store
+    Scheduler -->|Queue scheduled brand scans| Channel
 
     User -->|Generate report| Reports
     Reports --> ReportService
