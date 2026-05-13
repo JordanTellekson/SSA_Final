@@ -1,3 +1,6 @@
+// Entity Framework-backed scan store implementation.
+// Persists scans and variant analysis records to the configured SQL database.
+
 using SSA_Final.Exceptions;
 using SSA_Final.Interfaces;
 using Microsoft.EntityFrameworkCore;

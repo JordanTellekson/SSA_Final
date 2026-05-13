@@ -42,6 +42,7 @@ builder.Services.AddSingleton<ISearchService, SearchService>();
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
+builder.Services.AddScoped<IDomainRegistrationLookupService, RdapDomainRegistrationLookupService>();
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
 builder.Services.AddSingleton<IDomainFeedSource, OpenPhishFeedSource>();
@@ -61,6 +62,8 @@ builder.Services.AddHostedService<FeedIngestionBackgroundService>();
 
 var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
 var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
+var rdapTimeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:RdapTimeoutSeconds");
+var rdapTimeoutSpan = TimeSpan.FromSeconds(rdapTimeoutSeconds > 0 ? rdapTimeoutSeconds : 3);
 
 var feedTimeoutSeconds = builder.Configuration.GetValue<int>("FeedSources:OpenPhish:TimeoutSeconds");
 var feedTimeoutSpan = TimeSpan.FromSeconds(feedTimeoutSeconds > 0 ? feedTimeoutSeconds : 30);
@@ -100,13 +103,19 @@ builder.Services.AddHttpClient("DomainAnalyzer.Follow", client => {
         : null
 });
 
+// 3. RDAP Client
+builder.Services.AddHttpClient("DomainAnalyzer.Rdap", client => {
+    client.Timeout = rdapTimeoutSpan;
+});
+
 logger.LogInformation("Registered ISearchService -> SearchService (Singleton).");
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
 logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Singleton).");
-logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, FeedSource.OpenPhish.");
+logger.LogInformation("Registered IDomainRegistrationLookupService -> RdapDomainRegistrationLookupService (Scoped).");
+logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, DomainAnalyzer.Rdap, FeedSource.OpenPhish.");
 logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
 logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
 logger.LogInformation("Registered FeedIngestionBackgroundService (IHostedService).");
