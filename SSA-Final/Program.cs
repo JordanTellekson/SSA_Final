@@ -44,6 +44,7 @@ builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
 builder.Services.AddScoped<IDomainRegistrationLookupService, RdapDomainRegistrationLookupService>();
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
 builder.Services.AddSingleton<IDomainFeedSource, OpenPhishFeedSource>();
 
@@ -112,6 +113,7 @@ logger.LogInformation("Registered ISearchService -> SearchService (Singleton).")
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
+logger.LogInformation("Registered IReportService -> ReportService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
 logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Singleton).");
 logger.LogInformation("Registered IDomainRegistrationLookupService -> RdapDomainRegistrationLookupService (Scoped).");

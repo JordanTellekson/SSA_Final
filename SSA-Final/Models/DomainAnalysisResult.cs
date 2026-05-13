@@ -63,8 +63,22 @@ namespace SSA_Final.Models
         /// Additive risk score from all triggered risk signals. The analyzer
         /// caps this at 100 so it stays aligned with the risk classification scale.
         /// </summary>
-        [NotMapped]
         public int OverallRiskScore { get; set; }
+
+        /// <summary>
+        /// Highest-scoring signal captured for persisted alert reports.
+        /// </summary>
+        public string? TopRiskSignal { get; set; }
+
+        /// <summary>
+        /// Score contribution from <see cref="TopRiskSignal"/>.
+        /// </summary>
+        public int TopRiskSignalScore { get; set; }
+
+        /// <summary>
+        /// Human-readable detail for the highest-scoring signal.
+        /// </summary>
+        public string? TopRiskSignalDetail { get; set; }
 
         /// <summary>
         /// Score for edit-distance similarity between the domain root label and
@@ -145,13 +159,11 @@ namespace SSA_Final.Models
         /// <summary>
         /// True when the domain matched a high-confidence external phishing feed.
         /// </summary>
-        [NotMapped]
         public bool IsBlocklistMatch { get; set; }
 
         /// <summary>
         /// Name of the external feed that produced the blocklist match.
         /// </summary>
-        [NotMapped]
         public string? BlocklistSource { get; set; }
 
         /// <summary>
@@ -183,6 +195,21 @@ namespace SSA_Final.Models
                 "Critical" => "Critical",
                 _ => "Low"
             };
+        }
+
+        public void ApplyTopRiskSignal(IEnumerable<DomainRiskSignalScore?> signals)
+        {
+            var topSignal = signals
+                .Where(signal => signal is not null)
+                .Select(signal => signal!)
+                .Where(signal => signal.Score > 0 || signal.Triggered)
+                .OrderByDescending(signal => signal.Score)
+                .ThenBy(signal => signal.Signal)
+                .FirstOrDefault();
+
+            TopRiskSignal = topSignal?.Signal;
+            TopRiskSignalScore = topSignal?.Score ?? 0;
+            TopRiskSignalDetail = topSignal?.Detail;
         }
     }
 }

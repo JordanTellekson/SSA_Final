@@ -13,6 +13,7 @@ namespace SSA_Final.Interfaces
         List<DomainScan> GetPendingScans();
         List<DomainScan> GetInProgressScans();
         Task<bool> GetAnyAsync();
+        Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow);
         Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query);
         Task<IReadOnlyList<DomainAnalysisResult>> GetVariantsAsync(
             Guid scanId,

@@ -226,6 +226,9 @@ namespace SSA_Final.Services
                         IsValidDomain = true,
                         OverallRiskScore = _riskThresholds.BlocklistMatchScore,
                         RiskClassification = DomainAnalysisResult.ClassifyRiskScore(_riskThresholds.BlocklistMatchScore),
+                        TopRiskSignal = blocklistSignal.Signal,
+                        TopRiskSignalScore = blocklistSignal.Score,
+                        TopRiskSignalDetail = blocklistSignal.Detail,
                         TyposquattingEditDistance = blocklistSignal,
                         ExcessiveSubdomains = blocklistSignal,
                         HyphenAbuse = blocklistSignal,
@@ -315,7 +318,7 @@ namespace SSA_Final.Services
 
                 var isSuspicious = IsRiskScoreSuspicious(overallRisk);
 
-                return new DomainAnalysisResult
+                var result = new DomainAnalysisResult
                 {
                     InputDomain = normalizedInput,
                     DiscoveredDomain = normalizedInput,
@@ -345,6 +348,9 @@ namespace SSA_Final.Services
                         : "No structural risk indicators detected.",
                     AnalysedAt = DateTime.UtcNow
                 };
+
+                result.ApplyTopRiskSignal(signals);
+                return result;
             }
             catch (Exception ex)
             {

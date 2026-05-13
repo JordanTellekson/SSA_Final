@@ -233,6 +233,9 @@ namespace SSA_Final.Migrations
                     b.Property<DateTime>("AnalysedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("BlocklistSource")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("DiscoveredDomain")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -244,8 +247,14 @@ namespace SSA_Final.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsBlocklistMatch")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsSuspicious")
                         .HasColumnType("bit");
+
+                    b.Property<int>("OverallRiskScore")
+                        .HasColumnType("int");
 
                     b.Property<string>("RiskClassification")
                         .IsRequired()
@@ -254,6 +263,15 @@ namespace SSA_Final.Migrations
                     b.Property<string>("Summary")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TopRiskSignal")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TopRiskSignalDetail")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("TopRiskSignalScore")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 

@@ -59,6 +59,24 @@ namespace SSA_Final.Services
             lock (_lock) { return Task.FromResult(_scans.Count == 0); }
         }
 
+        public Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow)
+        {
+            var cutoff = DateTime.UtcNow - lookbackWindow;
+
+            lock (_lock)
+            {
+                var scans = _scans
+                    .Where(scan =>
+                        scan.Status == DomainScanStatus.Completed &&
+                        scan.NumMaliciousDomains > 0 &&
+                        (scan.TimeFinished ?? scan.CreatedAt) >= cutoff)
+                    .OrderByDescending(scan => scan.TimeFinished ?? scan.CreatedAt)
+                    .ToList();
+
+                return Task.FromResult<IReadOnlyList<DomainScan>>(scans);
+            }
+        }
+
         public Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
         {
             query.Page = Math.Max(1, query.Page);
