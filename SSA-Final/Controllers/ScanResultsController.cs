@@ -64,6 +64,7 @@ namespace SSA_Final.Controllers
                 variant.DiscoveredDomain ??= string.Empty;
                 variant.Summary ??= string.Empty;
                 variant.Indicators ??= new List<string>();
+                variant.RiskClassification = DomainAnalysisResult.NormalizeRiskClassification(variant.RiskClassification);
             }
 
             return View(scan);

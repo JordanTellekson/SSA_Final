@@ -138,4 +138,41 @@ public class SqlScanStoreServiceTests
 
         Assert.True(result);
     }
+
+    [Fact]
+    public async Task GetCompletedHighRiskScansAsync_ReturnsOnlyCompletedHighRiskScansInWindow()
+    {
+        await using var ctx = BuildContext();
+        var included = MakeScan("evil.com", DateTime.UtcNow.AddHours(-2));
+        included.TimeFinished = DateTime.UtcNow.AddHours(-1);
+        included.NumMaliciousDomains = 2;
+        included.Variants.Add(new DomainAnalysisResult
+        {
+            DiscoveredDomain = "evil-login.com",
+            IsSuspicious = true,
+            TopRiskSignal = "Keyword Abuse",
+            TopRiskSignalScore = 12
+        });
+
+        var clean = MakeScan("safe.com", DateTime.UtcNow.AddHours(-1));
+        clean.NumMaliciousDomains = 0;
+
+        var old = MakeScan("old.com", DateTime.UtcNow.AddHours(-30));
+        old.TimeFinished = DateTime.UtcNow.AddHours(-29);
+        old.NumMaliciousDomains = 1;
+
+        var pending = MakeScan("pending.com", DateTime.UtcNow.AddHours(-1));
+        pending.Status = DomainScanStatus.Pending;
+        pending.NumMaliciousDomains = 1;
+
+        ctx.DomainScans.AddRange(included, clean, old, pending);
+        await ctx.SaveChangesAsync();
+
+        var svc = BuildService(ctx);
+        var result = await svc.GetCompletedHighRiskScansAsync(TimeSpan.FromHours(24));
+
+        var scan = Assert.Single(result);
+        Assert.Equal(included.Id, scan.Id);
+        Assert.Single(scan.Variants);
+    }
 }
