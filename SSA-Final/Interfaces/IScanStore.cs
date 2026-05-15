@@ -24,6 +24,15 @@ namespace SSA_Final.Interfaces
         /// Used by feed ingestion to skip recently-seen domains and prevent duplicate records.
         /// </summary>
         Task<bool> WasRecentlyScannedAsync(string domain, TimeSpan window);
+
+        /// <summary>
+        /// Returns all completed <see cref="DomainScan"/> records where
+        /// <see cref="DomainScan.TimeFinished"/> is on or after <paramref name="since"/>
+        /// and <see cref="DomainScan.NumMaliciousDomains"/> is at least
+        /// <paramref name="minSuspiciousVariants"/>, ordered by
+        /// <see cref="DomainScan.NumMaliciousDomains"/> descending.
+        /// </summary>
+        Task<IReadOnlyList<DomainScan>> GetRecentHighRiskAsync(DateTime since, int minSuspiciousVariants);
     }
 }
 

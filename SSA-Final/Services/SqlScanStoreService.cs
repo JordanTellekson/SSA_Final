@@ -81,7 +81,6 @@ namespace SSA_Final.Services
             try
             {
                 return _dbContext.DomainScans
-                    .Include(x => x.Variants)
                     .FirstOrDefault(x => x.Id == id);
             }
             catch (Exception ex)
@@ -164,9 +163,10 @@ namespace SSA_Final.Services
             }
 
             // SEARCH path (must materialize for scoring)
+            // Capped at 500 rows to prevent full table scans on large datasets.
             if (!string.IsNullOrWhiteSpace(query.Query))
             {
-                var list = await scanned.ToListAsync();
+                var list = await scanned.Take(500).ToListAsync();
 
                 var results = _searchService.Search(list, query.Query).ToList();
 
@@ -206,6 +206,32 @@ namespace SSA_Final.Services
                 Page = query.Page,
                 PageSize = query.PageSize
             };
+        }
+
+        public async Task<IReadOnlyList<DomainScan>> GetRecentHighRiskAsync(DateTime since, int minSuspiciousVariants)
+        {
+            _logger.LogDebug(
+                "[SqlScanStoreService] Retrieving high-risk scans since {Since} with minSuspiciousVariants={Min}.",
+                since,
+                minSuspiciousVariants);
+
+            try
+            {
+                return await _dbContext.DomainScans
+                    .Where(s =>
+                        s.Status == DomainScanStatus.Completed &&
+                        s.TimeFinished >= since &&
+                        s.NumMaliciousDomains >= minSuspiciousVariants)
+                    .OrderByDescending(s => s.NumMaliciousDomains)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "ScanStore: failed to retrieve high-risk scans since {Since}.", since);
+                throw new ScanStoreException(
+                    $"Failed to retrieve high-risk scans since {since}.", ex);
+            }
         }
 
         public async Task<IReadOnlyList<DomainAnalysisResult>> GetVariantsAsync(

@@ -136,6 +136,22 @@ namespace SSA_Final.Services
             }
         }
 
+        public Task<IReadOnlyList<DomainScan>> GetRecentHighRiskAsync(DateTime since, int minSuspiciousVariants)
+        {
+            lock (_lock)
+            {
+                IReadOnlyList<DomainScan> results = _scans
+                    .Where(s =>
+                        s.Status == DomainScanStatus.Completed &&
+                        s.TimeFinished >= since &&
+                        s.NumMaliciousDomains >= minSuspiciousVariants)
+                    .OrderByDescending(s => s.NumMaliciousDomains)
+                    .ToList();
+
+                return Task.FromResult(results);
+            }
+        }
+
         public Task<IReadOnlyList<DomainAnalysisResult>> GetVariantsAsync(
             Guid scanId,
             VariantQuery query)
