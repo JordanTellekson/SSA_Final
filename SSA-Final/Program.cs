@@ -136,6 +136,21 @@ builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
+var applyMigrationsOnStartup = builder.Configuration.GetValue("Database:ApplyMigrationsOnStartup", true);
+if (applyMigrationsOnStartup)
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<SSA_FinalContext>();
+
+    logger.LogInformation("Applying database migrations.");
+    await dbContext.Database.MigrateAsync();
+    logger.LogInformation("Database migrations applied.");
+}
+else
+{
+    logger.LogInformation("Database migration on startup is disabled.");
+}
+
 // Middleware: global exception logging
 app.Use(async (context, next) =>
 {
