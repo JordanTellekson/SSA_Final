@@ -13,6 +13,9 @@ namespace SSA_Final.Models
         FeedIngestion = 1,
 
         [Description("Scheduled scan")]
-        Scheduled = 2
+        Scheduled = 2,
+
+        [Description("CertStream ingestion")]
+        CertStream = 3
     }
 }

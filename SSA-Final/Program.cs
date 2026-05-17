@@ -46,8 +46,6 @@ builder.Services.AddScoped<IDomainRegistrationLookupService, RdapDomainRegistrat
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
-builder.Services.AddSingleton<IDomainFeedSource, OpenPhishFeedSource>();
-
 
 // Scan background job infrastructure: register an unbounded channel and expose both
 // ends separately so the controller only writes and the background service only reads.
@@ -59,7 +57,11 @@ var scanChannel = Channel.CreateUnbounded<Guid>(new UnboundedChannelOptions
 builder.Services.AddSingleton(scanChannel.Writer);
 builder.Services.AddSingleton(scanChannel.Reader);
 builder.Services.AddHostedService<ScanBackgroundService>();
-builder.Services.AddHostedService<FeedIngestionBackgroundService>();
+if (builder.Configuration.GetValue("CertStream:Enabled", true))
+{
+    builder.Services.AddHostedService<CertStreamIngestionBackgroundService>();
+}
+
 builder.Services.AddHostedService<ScheduledScanBackgroundService>();
 
 var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
@@ -67,11 +69,11 @@ var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
 var rdapTimeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:RdapTimeoutSeconds");
 var rdapTimeoutSpan = TimeSpan.FromSeconds(rdapTimeoutSeconds > 0 ? rdapTimeoutSeconds : 3);
 
-var feedTimeoutSeconds = builder.Configuration.GetValue<int>("FeedSources:OpenPhish:TimeoutSeconds");
-var feedTimeoutSpan = TimeSpan.FromSeconds(feedTimeoutSeconds > 0 ? feedTimeoutSeconds : 30);
-builder.Services.AddHttpClient(OpenPhishFeedSource.HttpClientName, client =>
+var blocklistTimeoutSeconds = builder.Configuration.GetValue<int>("PhishingBlocklists:OpenPhish:TimeoutSeconds");
+var blocklistTimeoutSpan = TimeSpan.FromSeconds(blocklistTimeoutSeconds > 0 ? blocklistTimeoutSeconds : 30);
+builder.Services.AddHttpClient(PhishingBlocklistService.HttpClientName, client =>
 {
-    client.Timeout = feedTimeoutSpan;
+    client.Timeout = blocklistTimeoutSpan;
 });
 
 // In development, the DangerousAcceptAnyServerCertificateValidator bypass is intentionally
@@ -116,12 +118,11 @@ logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Sco
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
 logger.LogInformation("Registered IReportService -> ReportService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
-logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Singleton).");
 logger.LogInformation("Registered IDomainRegistrationLookupService -> RdapDomainRegistrationLookupService (Scoped).");
-logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, DomainAnalyzer.Rdap, FeedSource.OpenPhish.");
+logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, DomainAnalyzer.Rdap, Blocklist.OpenPhish.");
 logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
 logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
-logger.LogInformation("Registered FeedIngestionBackgroundService (IHostedService).");
+logger.LogInformation("Registered CertStreamIngestionBackgroundService (IHostedService) when CertStream:Enabled is true.");
 logger.LogInformation("Registered ScheduledScanBackgroundService (IHostedService).");
 
 // Configure Identity

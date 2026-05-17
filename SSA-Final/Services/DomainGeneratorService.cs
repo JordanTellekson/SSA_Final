@@ -25,7 +25,40 @@ namespace SSA_Final.Services
         ];
 
         private static readonly string[] SubdomainPrefixes =
-            ["secure", "login", "account", "verify", "blog"];
+        [
+            "secure",
+            "login",
+            "account",
+            "verify",
+            "signin",
+            "auth",
+            "sso",
+            "id",
+            "portal",
+            "admin",
+            "dashboard",
+            "support",
+            "help",
+            "service",
+            "billing",
+            "payment",
+            "invoice",
+            "wallet",
+            "update",
+            "confirm",
+            "recovery",
+            "password",
+            "reset",
+            "mfa",
+            "webmail",
+            "mail",
+            "cloud",
+            "docs",
+            "blog",
+            "download",
+            "app",
+            "my"
+        ];
 
         // QWERTY-adjacent keys for likely typo substitutions.
         private static readonly Dictionary<char, char[]> AdjacentKeys = new()
