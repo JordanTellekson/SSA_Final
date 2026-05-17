@@ -11,6 +11,39 @@
     <p>Submit a domain to begin scanning for typosquatting threats.</p>
 </div>
 
+@* Stats strip — only rendered once data exists *@
+@if (Model.Stats != null && Model.Stats.TotalScans > 0)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 text-center">
+                <div class="display-6 fw-bold text-primary">@Model.Stats.TotalScans.ToString("N0")</div>
+                <div class="text-muted small mt-1">Total Scans</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 text-center">
+                <div class="display-6 fw-bold">@Model.Stats.TotalVariantsAnalyzed.ToString("N0")</div>
+                <div class="text-muted small mt-1">Variants Analyzed</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 text-center">
+                <div class="display-6 fw-bold text-danger">@Model.Stats.TotalSuspiciousVariants.ToString("N0")</div>
+                <div class="text-muted small mt-1">Suspicious Domains</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 text-center">
+                <div class="display-6 fw-bold @(Model.Stats.ActiveScans > 0 ? "text-warning" : "text-success")">
+                    @Model.Stats.ActiveScans.ToString("N0")
+                </div>
+                <div class="text-muted small mt-1">Active Scans</div>
+            </div>
+        </div>
+    </div>
+}
+
 @* Primary scan card: split layout *@
 <div class="card shadow-sm border-0 rounded-4 mb-4">
     <div class="card-body p-4 p-lg-5">

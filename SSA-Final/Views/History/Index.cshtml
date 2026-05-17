@@ -9,8 +9,17 @@
 }
 
 <div class="page-header mb-4">
-    <h1 class="display-5">Scan History</h1>
-    <p>A complete archive of all past scans, grouped by date.</p>
+    <div class="d-flex align-items-start justify-content-between gap-3">
+        <div>
+            <h1 class="display-5">Scan History</h1>
+            <p>A complete archive of all past scans, grouped by date.</p>
+        </div>
+        <a href="/api/Reports/download-csv"
+           class="btn btn-outline-light btn-sm flex-shrink-0 mt-1"
+           title="Download scan report as CSV (last 30 days)">
+            ↓ Export Report
+        </a>
+    </div>
 </div>
 
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
