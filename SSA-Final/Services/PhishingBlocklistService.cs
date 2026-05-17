@@ -12,18 +12,24 @@ namespace SSA_Final.Services
         private readonly IMemoryCache _cache;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<PhishingBlocklistService> _logger;
+        private readonly string _feedUrl;
 
         private const string CacheKey = "PhishingBlocklist";
         private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(60);
+        public const string HttpClientName = "Blocklist.OpenPhish";
 
         public PhishingBlocklistService(
             IMemoryCache cache,
             IHttpClientFactory httpClientFactory,
-            ILogger<PhishingBlocklistService> logger)
+            ILogger<PhishingBlocklistService> logger,
+            IConfiguration configuration)
         {
             _cache = cache;
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            _feedUrl = configuration["PhishingBlocklists:OpenPhish:Url"]
+                ?? configuration["FeedSources:OpenPhish:Url"]
+                ?? "https://openphish.com/feed.txt";
         }
 
         public async Task<BlocklistCheckResult> CheckAsync(string domain)
@@ -48,12 +54,13 @@ namespace SSA_Final.Services
 
             try
             {
-                var client = _httpClientFactory.CreateClient();
-                var data = await client.GetStringAsync("https://openphish.com/feed.txt");
+                var client = _httpClientFactory.CreateClient(HttpClientName);
+                var data = await client.GetStringAsync(_feedUrl);
 
                 var domains = data.Split('\n', StringSplitOptions.RemoveEmptyEntries)
                     .Select(ParseDomain)
                     .Where(d => !string.IsNullOrWhiteSpace(d))
+                    .Select(d => d!)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 var result = (

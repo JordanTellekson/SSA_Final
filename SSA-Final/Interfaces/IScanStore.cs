@@ -13,6 +13,7 @@ namespace SSA_Final.Interfaces
         List<DomainScan> GetPendingScans();
         List<DomainScan> GetInProgressScans();
         Task<bool> GetAnyAsync();
+        Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow, int minMaliciousDomains = 0);
         Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query);
         Task<IReadOnlyList<DomainAnalysisResult>> GetVariantsAsync(
             Guid scanId,
@@ -33,6 +34,13 @@ namespace SSA_Final.Interfaces
         /// <see cref="DomainScan.NumMaliciousDomains"/> descending.
         /// </summary>
         Task<IReadOnlyList<DomainScan>> GetRecentHighRiskAsync(DateTime since, int minSuspiciousVariants);
+
+        /// <summary>
+        /// Returns aggregated statistics across all scan records: total scans, total variants
+        /// analyzed, suspicious variant count, scans with threats, active scans, and a
+        /// per-trigger breakdown. Used to populate the Dashboard stats strip.
+        /// </summary>
+        Task<ScanStats> GetScanStatsAsync(CancellationToken ct = default);
     }
 }
 

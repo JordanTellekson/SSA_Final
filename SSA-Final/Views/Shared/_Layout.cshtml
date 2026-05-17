@@ -11,9 +11,9 @@
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-dark bg-dark box-shadow mb-3">
             <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">SSA_Final</a>
+                <a class="navbar-brand fw-semibold" asp-area="" asp-controller="Home" asp-action="Index">SSA_Final</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
@@ -21,16 +21,16 @@
                 <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
                     <ul class="navbar-nav flex-grow-1">
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
+                            <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Dashboard" asp-action="Index">Dashboard</a>
+                            <a class="nav-link" asp-area="" asp-controller="Dashboard" asp-action="Index">Dashboard</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="ScanResults" asp-action="Index">Scan Results</a>
+                            <a class="nav-link" asp-area="" asp-controller="ScanResults" asp-action="Index">Scan Results</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="History" asp-action="Index">History</a>
+                            <a class="nav-link" asp-area="" asp-controller="History" asp-action="Index">History</a>
                         </li>
                     </ul>
                     <partial name="_LoginPartial" />
@@ -44,9 +44,33 @@
         </main>
     </div>
 
-    <footer class="border-top footer text-muted">
+    <footer class="site-footer bg-dark text-white pt-5 pb-3">
         <div class="container">
-            &copy; 2026 - SSA_Final - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+            <div class="row gy-4 align-items-start">
+                <div class="col-md-5 col-lg-4">
+                    <h5 class="fw-bold mb-2">SSA_Final</h5>
+                    <p class="text-white-50 small mb-0">
+                        Domain risk assessment and typosquatting detection platform for security-conscious teams.
+                    </p>
+                </div>
+                <div class="col-md-3 col-lg-2 offset-md-0 offset-lg-4">
+                    <h6 class="text-uppercase text-white-50 fw-semibold small mb-3" style="letter-spacing: 0.08em;">Navigate</h6>
+                    <ul class="list-unstyled mb-0 small">
+                        <li class="mb-2"><a class="text-white-50 text-decoration-none footer-link" asp-area="" asp-controller="Home" asp-action="Index">Home</a></li>
+                        <li class="mb-2"><a class="text-white-50 text-decoration-none footer-link" asp-area="" asp-controller="Dashboard" asp-action="Index">Dashboard</a></li>
+                        <li class="mb-2"><a class="text-white-50 text-decoration-none footer-link" asp-area="" asp-controller="ScanResults" asp-action="Index">Scan Results</a></li>
+                        <li><a class="text-white-50 text-decoration-none footer-link" asp-area="" asp-controller="History" asp-action="Index">History</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-2 col-lg-2">
+                    <h6 class="text-uppercase text-white-50 fw-semibold small mb-3" style="letter-spacing: 0.08em;">Legal</h6>
+                    <ul class="list-unstyled mb-0 small">
+                        <li><a class="text-white-50 text-decoration-none footer-link" asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="border-secondary mt-4 mb-3" />
+            <p class="text-white-50 small mb-0">&copy; 2026 SSA_Final. All rights reserved.</p>
         </div>
     </footer>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>

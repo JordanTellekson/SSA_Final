@@ -42,10 +42,10 @@ builder.Services.AddSingleton<ISearchService, SearchService>();
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
+builder.Services.AddScoped<IDomainRegistrationLookupService, RdapDomainRegistrationLookupService>();
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
-builder.Services.AddSingleton<IDomainFeedSource, OpenPhishFeedSource>();
-
 
 // Scan background job infrastructure: register an unbounded channel and expose both
 // ends separately so the controller only writes and the background service only reads.
@@ -57,16 +57,33 @@ var scanChannel = Channel.CreateUnbounded<Guid>(new UnboundedChannelOptions
 builder.Services.AddSingleton(scanChannel.Writer);
 builder.Services.AddSingleton(scanChannel.Reader);
 builder.Services.AddHostedService<ScanBackgroundService>();
+if (builder.Configuration.GetValue("CertStream:Enabled", true))
+{
+    builder.Services.AddHostedService<CertStreamIngestionBackgroundService>();
+}
+
+builder.Services.AddHostedService<ScheduledScanBackgroundService>();
+
+builder.Services.AddSingleton<IDomainFeedSource, OpenPhishFeedSource>();
 builder.Services.AddHostedService<FeedIngestionBackgroundService>();
 
 var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
 var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
+var rdapTimeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:RdapTimeoutSeconds");
+var rdapTimeoutSpan = TimeSpan.FromSeconds(rdapTimeoutSeconds > 0 ? rdapTimeoutSeconds : 3);
 
-var feedTimeoutSeconds = builder.Configuration.GetValue<int>("FeedSources:OpenPhish:TimeoutSeconds");
-var feedTimeoutSpan = TimeSpan.FromSeconds(feedTimeoutSeconds > 0 ? feedTimeoutSeconds : 30);
+var blocklistTimeoutSeconds = builder.Configuration.GetValue<int>("PhishingBlocklists:OpenPhish:TimeoutSeconds");
+var blocklistTimeoutSpan = TimeSpan.FromSeconds(blocklistTimeoutSeconds > 0 ? blocklistTimeoutSeconds : 30);
+builder.Services.AddHttpClient(PhishingBlocklistService.HttpClientName, client =>
+{
+    client.Timeout = blocklistTimeoutSpan;
+});
+
+var feedSourceTimeoutSeconds = builder.Configuration.GetValue<int>("FeedSources:OpenPhish:TimeoutSeconds");
+var feedSourceTimeoutSpan = TimeSpan.FromSeconds(feedSourceTimeoutSeconds > 0 ? feedSourceTimeoutSeconds : 30);
 builder.Services.AddHttpClient(OpenPhishFeedSource.HttpClientName, client =>
 {
-    client.Timeout = feedTimeoutSpan;
+    client.Timeout = feedSourceTimeoutSpan;
 });
 
 // In development, the DangerousAcceptAnyServerCertificateValidator bypass is intentionally
@@ -100,15 +117,24 @@ builder.Services.AddHttpClient("DomainAnalyzer.Follow", client => {
         : null
 });
 
+// 3. RDAP Client
+builder.Services.AddHttpClient("DomainAnalyzer.Rdap", client => {
+    client.Timeout = rdapTimeoutSpan;
+});
+
 logger.LogInformation("Registered ISearchService -> SearchService (Singleton).");
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
+logger.LogInformation("Registered IReportService -> ReportService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
-logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Singleton).");
-logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, FeedSource.OpenPhish.");
+logger.LogInformation("Registered IDomainRegistrationLookupService -> RdapDomainRegistrationLookupService (Scoped).");
+logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, DomainAnalyzer.Rdap, Blocklist.OpenPhish, FeedSource.OpenPhish.");
 logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
 logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
+logger.LogInformation("Registered CertStreamIngestionBackgroundService (IHostedService) when CertStream:Enabled is true.");
+logger.LogInformation("Registered ScheduledScanBackgroundService (IHostedService).");
+logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Singleton).");
 logger.LogInformation("Registered FeedIngestionBackgroundService (IHostedService).");
 
 // Configure Identity
@@ -122,6 +148,21 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages();
 
 var app = builder.Build();
+
+var applyMigrationsOnStartup = builder.Configuration.GetValue("Database:ApplyMigrationsOnStartup", true);
+if (applyMigrationsOnStartup)
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<SSA_FinalContext>();
+
+    logger.LogInformation("Applying database migrations.");
+    await dbContext.Database.MigrateAsync();
+    logger.LogInformation("Database migrations applied.");
+}
+else
+{
+    logger.LogInformation("Database migration on startup is disabled.");
+}
 
 // Middleware: global exception logging
 app.Use(async (context, next) =>

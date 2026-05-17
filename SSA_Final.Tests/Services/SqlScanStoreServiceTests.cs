@@ -138,4 +138,68 @@ public class SqlScanStoreServiceTests
 
         Assert.True(result);
     }
+
+    [Fact]
+    public async Task GetCompletedHighRiskScansAsync_ReturnsCompletedScansInWindowRegardlessOfRisk()
+    {
+        await using var ctx = BuildContext();
+        var highRisk = MakeScan("evil.com", DateTime.UtcNow.AddHours(-2));
+        highRisk.TimeFinished = DateTime.UtcNow.AddHours(-1);
+        highRisk.NumMaliciousDomains = 2;
+        highRisk.Variants.Add(new DomainAnalysisResult
+        {
+            DiscoveredDomain = "evil-login.com",
+            IsSuspicious = true,
+            TopRiskSignal = "Keyword Abuse",
+            TopRiskSignalScore = 12
+        });
+
+        var clean = MakeScan("safe.com", DateTime.UtcNow.AddHours(-1));
+        clean.NumMaliciousDomains = 0;
+
+        var tooOld = MakeScan("old.com", DateTime.UtcNow.AddHours(-30));
+        tooOld.TimeFinished = DateTime.UtcNow.AddHours(-29);
+        tooOld.NumMaliciousDomains = 1;
+
+        var pending = MakeScan("pending.com", DateTime.UtcNow.AddHours(-1));
+        pending.Status = DomainScanStatus.Pending;
+        pending.NumMaliciousDomains = 1;
+
+        ctx.DomainScans.AddRange(highRisk, clean, tooOld, pending);
+        await ctx.SaveChangesAsync();
+
+        var svc = BuildService(ctx);
+        var result = await svc.GetCompletedHighRiskScansAsync(TimeSpan.FromHours(24));
+
+        // Both completed scans within the window are returned (clean + high-risk).
+        // Scans outside the window and non-completed scans are excluded.
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, s => s.Id == highRisk.Id);
+        Assert.Contains(result, s => s.Id == clean.Id);
+
+        // Variants are eagerly loaded for the high-risk scan.
+        var highRiskResult = result.Single(s => s.Id == highRisk.Id);
+        Assert.Single(highRiskResult.Variants);
+    }
+
+    [Fact]
+    public async Task GetCompletedHighRiskScansAsync_WithMinMaliciousFilter_ExcludesCleanScans()
+    {
+        await using var ctx = BuildContext();
+        var highRisk = MakeScan("evil.com", DateTime.UtcNow.AddHours(-2));
+        highRisk.TimeFinished = DateTime.UtcNow.AddHours(-1);
+        highRisk.NumMaliciousDomains = 2;
+
+        var clean = MakeScan("safe.com", DateTime.UtcNow.AddHours(-1));
+        clean.NumMaliciousDomains = 0;
+
+        ctx.DomainScans.AddRange(highRisk, clean);
+        await ctx.SaveChangesAsync();
+
+        var svc = BuildService(ctx);
+        var result = await svc.GetCompletedHighRiskScansAsync(TimeSpan.FromHours(24), minMaliciousDomains: 1);
+
+        var scan = Assert.Single(result);
+        Assert.Equal(highRisk.Id, scan.Id);
+    }
 }

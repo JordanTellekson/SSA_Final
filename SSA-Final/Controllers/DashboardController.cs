@@ -28,17 +28,19 @@ namespace SSA_Final.Controllers
         }
 
         [HttpGet]
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            return View(new DomainScanViewModel());
+            var stats = await _scanStore.GetScanStatsAsync();
+            return View(new DomainScanViewModel { Stats = stats });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Index(DomainScanViewModel model)
+        public async Task<IActionResult> Index(DomainScanViewModel model)
         {
             if (!ModelState.IsValid)
             {
+                model.Stats = await _scanStore.GetScanStatsAsync();
                 return View(model);
             }
 

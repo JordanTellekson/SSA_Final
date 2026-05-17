@@ -59,6 +59,24 @@ namespace SSA_Final.Services
             lock (_lock) { return Task.FromResult(_scans.Count == 0); }
         }
 
+        public Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow, int minMaliciousDomains = 0)
+        {
+            var cutoff = DateTime.UtcNow - lookbackWindow;
+
+            lock (_lock)
+            {
+                var scans = _scans
+                    .Where(scan =>
+                        scan.Status == DomainScanStatus.Completed &&
+                        scan.NumMaliciousDomains >= minMaliciousDomains &&
+                        (scan.TimeFinished ?? scan.CreatedAt) >= cutoff)
+                    .OrderByDescending(scan => scan.TimeFinished ?? scan.CreatedAt)
+                    .ToList();
+
+                return Task.FromResult<IReadOnlyList<DomainScan>>(scans);
+            }
+        }
+
         public Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
         {
             query.Page = Math.Max(1, query.Page);
@@ -149,6 +167,30 @@ namespace SSA_Final.Services
                     .ToList();
 
                 return Task.FromResult(results);
+            }
+        }
+
+        public Task<ScanStats> GetScanStatsAsync(CancellationToken ct = default)
+        {
+            lock (_lock)
+            {
+                var triggerGroups = _scans
+                    .GroupBy(s => s.ScanTrigger.ToString())
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                var stats = new ScanStats
+                {
+                    TotalScans = _scans.Count,
+                    TotalVariantsAnalyzed = _scans.Sum(s => s.VariantCount),
+                    TotalSuspiciousVariants = _scans.Sum(s => s.NumMaliciousDomains),
+                    ScansWithThreats = _scans.Count(s => s.NumMaliciousDomains > 0),
+                    ActiveScans = _scans.Count(s =>
+                        s.Status == DomainScanStatus.Pending ||
+                        s.Status == DomainScanStatus.InProgress),
+                    ScansByTrigger = triggerGroups
+                };
+
+                return Task.FromResult(stats);
             }
         }
 

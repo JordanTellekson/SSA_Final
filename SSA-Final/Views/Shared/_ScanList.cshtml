@@ -1,9 +1,13 @@
-﻿@using SSA_Final.ViewModels
+@using SSA_Final.Models
+@using SSA_Final.ViewModels
 @model PagedResultViewModel<DomainScan>
 
 @{
     bool hasActiveScans = Model.Result.Items.Any(s =>
         s.Status == DomainScanStatus.Pending || s.Status == DomainScanStatus.InProgress);
+
+    var today = DateTime.Today;
+    var labelOrder = new[] { "Today", "Yesterday", "This Week", "Older" };
 }
 
 @if (hasActiveScans)
@@ -13,15 +17,34 @@
 
 @if (!Model.Result.Items.Any())
 {
-    <p>Sorry, we couldn't find any matching results.</p>
+    <p class="text-muted">Sorry, we couldn't find any matching results.</p>
 }
 else if (Model.ViewType == "history")
 {
-    <ul class="list-group">
-        @foreach (var scan in Model.Result.Items)
+    @* ── History: time-grouped card archive ── *@
+    var grouped = Model.Result.Items
+        .GroupBy(s =>
+        {
+            var d = s.CreatedAt.ToLocalTime().Date;
+            if (d == today) return "Today";
+            if (d == today.AddDays(-1)) return "Yesterday";
+            if (d >= today.AddDays(-7)) return "This Week";
+            return "Older";
+        })
+        .OrderBy(g => Array.IndexOf(labelOrder, g.Key));
+
+    foreach (var group in grouped)
+    {
+        <div class="time-group-label d-flex align-items-center gap-3">
+            <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing: 0.07em; white-space: nowrap;">@group.Key</span>
+            <hr class="flex-grow-1 my-0" />
+        </div>
+
+        foreach (var scan in group)
         {
             string orbClass;
             string tooltip;
+
             switch (scan.Status)
             {
                 case DomainScanStatus.Completed:
@@ -46,75 +69,112 @@ else if (Model.ViewType == "history")
                     break;
             }
 
-            <li class="list-group-item d-flex align-items-center gap-3">
-                <div class="orb @orbClass flex-shrink-0"
-                     data-bs-toggle="tooltip"
-                     data-bs-title="@tooltip"></div>
+            <div class="scan-card card shadow-sm border-0 rounded-4 mb-2">
+                <div class="card-body d-flex align-items-center gap-3 p-3">
+                    <div class="orb @orbClass"
+                         data-bs-toggle="tooltip"
+                         data-bs-title="@tooltip"></div>
 
-                <div class="flex-grow-1">
-                    <strong>@scan.BaseDomain</strong>
-                    <small class="text-muted ms-2">@scan.CreatedAt.ToLocalTime().ToString("g")</small>
-                </div>
+                    <div class="flex-grow-1 min-width-0">
+                        <div class="fw-semibold text-truncate">@scan.BaseDomain</div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap mt-1">
+                            <small class="text-muted">@scan.CreatedAt.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")</small>
+                            <span class="badge text-bg-secondary rounded-pill" style="font-size: 0.7rem;">@scan.ScanTrigger</span>
+                            <small class="text-muted">@scan.VariantCount variant(s)</small>
+                        </div>
+                    </div>
 
-                <div class="d-flex gap-3 align-items-center">
-                    @if (scan.NumMaliciousDomains > 0)
-                    {
-                        <span class="badge bg-danger">@scan.NumMaliciousDomains suspicious</span>
-                    }
-                    else if (scan.Status == DomainScanStatus.Completed)
-                    {
-                        <span class="badge bg-success">Clean</span>
-                    }
-                    <span class="text-muted small">@scan.VariantCount variant(s)</span>
-                    <a asp-controller="ScanResults" asp-action="Details" asp-route-id="@scan.Id"
-                           class="btn btn-sm btn-outline-primary">
-                        View Scan
-                    </a>
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                        @if (scan.NumMaliciousDomains > 0)
+                        {
+                            <span class="badge bg-danger rounded-pill">@scan.NumMaliciousDomains suspicious</span>
+                        }
+                        else if (scan.Status == DomainScanStatus.Completed)
+                        {
+                            <span class="badge bg-success rounded-pill">Clean</span>
+                        }
+                        else if (scan.Status == DomainScanStatus.Failed)
+                        {
+                            <span class="badge bg-secondary rounded-pill">Failed</span>
+                        }
+                        <a asp-controller="ScanResults" asp-action="Details" asp-route-id="@scan.Id"
+                           class="btn btn-sm btn-outline-primary rounded-pill">View</a>
+                    </div>
                 </div>
-            </li>
+            </div>
         }
-    </ul>
+    }
 }
 else
 {
-    <table class="table table-hover">
-        <thead>
-            <tr>
-                <th>Base Domain</th>
-                <th>Scanned At</th>
-                <th>Finished</th>
-                <th>Variants</th>
-                <th>Suspicious</th>
-                <th>Status</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var scan in Model.Result.Items)
-            {
-                <tr>
-                    <td><strong>@scan.BaseDomain</strong></td>
-                    <td>@scan.CreatedAt.ToLocalTime().ToString("g")</td>
-                    <td>@(scan.TimeFinished?.ToLocalTime().ToString("g") ?? "—")</td>
-                    <td>@scan.VariantCount</td>
-                    <td>
-                        @if (scan.NumMaliciousDomains > 0)
-                        {
-                            <span class="badge bg-danger">@scan.NumMaliciousDomains</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-success">0</span>
-                        }
-                    </td>
-                    <td>@scan.Status</td>
-                    <td>
-                        <a asp-action="Details" asp-route-id="@scan.Id" class="btn btn-sm btn-outline-primary">View Details</a>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    @* ── Scan Results: recent activity card feed ── *@
+    foreach (var scan in Model.Result.Items)
+    {
+        string orbClass;
+        string tooltip;
+
+        switch (scan.Status)
+        {
+            case DomainScanStatus.Completed:
+                if (scan.NumMaliciousDomains > 0)
+                {
+                    orbClass = "orb-warning";
+                    tooltip = $"Scan complete — {scan.NumMaliciousDomains} suspicious domain(s)";
+                }
+                else
+                {
+                    orbClass = "orb-success";
+                    tooltip = "Scan complete — no threats found";
+                }
+                break;
+            case DomainScanStatus.Failed:
+                orbClass = "orb-warning";
+                tooltip = "Scan failed";
+                break;
+            default:
+                orbClass = "orb-pending";
+                tooltip = "Scan in progress";
+                break;
+        }
+
+        <div class="scan-card card shadow-sm border-0 rounded-4 mb-3">
+            <div class="card-body d-flex align-items-center gap-3 p-4">
+                <div class="orb @orbClass"
+                     data-bs-toggle="tooltip"
+                     data-bs-title="@tooltip"></div>
+
+                <div class="flex-grow-1 min-width-0">
+                    <div class="fw-semibold fs-6 text-truncate">@scan.BaseDomain</div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap mt-1">
+                        <small class="text-muted">@scan.CreatedAt.ToLocalTime().ToString("MMM d 'at' h:mm tt")</small>
+                        <span class="badge text-bg-secondary rounded-pill" style="font-size: 0.7rem;">@scan.ScanTrigger</span>
+                        <small class="text-muted">@scan.VariantCount variant(s)</small>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                    @if (scan.Status == DomainScanStatus.Pending || scan.Status == DomainScanStatus.InProgress)
+                    {
+                        <span class="badge bg-primary rounded-pill">@scan.Status</span>
+                    }
+                    else if (scan.Status == DomainScanStatus.Failed)
+                    {
+                        <span class="badge bg-danger rounded-pill">Failed</span>
+                    }
+                    else if (scan.NumMaliciousDomains > 0)
+                    {
+                        <span class="badge bg-danger rounded-pill">@scan.NumMaliciousDomains suspicious</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success rounded-pill">Clean</span>
+                    }
+                    <a asp-controller="ScanResults" asp-action="Details" asp-route-id="@scan.Id"
+                       class="btn btn-sm btn-outline-primary rounded-pill">View Details</a>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @await Html.PartialAsync("_Pagination", Model.Result)
