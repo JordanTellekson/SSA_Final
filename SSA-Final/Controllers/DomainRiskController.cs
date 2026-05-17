@@ -55,6 +55,7 @@ namespace SSA_Final.Controllers
                 IsValidDomain = !string.IsNullOrWhiteSpace(domain),
                 IsSuspicious = false,
                 OverallRiskScore = 0,
+                RiskClassification = DomainAnalysisResult.ClassifyRiskScore(0),
                 Summary = isKnownActiveDomain
                     ? "Domain found in active-domain list."
                     : "Domain not found in active-domain list."
@@ -79,6 +80,7 @@ namespace SSA_Final.Controllers
             }
 
             result.Indicators ??= new List<string>();
+            result.RiskClassification = DomainAnalysisResult.ClassifyRiskScore(result.OverallRiskScore);
 
             if (string.IsNullOrWhiteSpace(result.Summary))
             {

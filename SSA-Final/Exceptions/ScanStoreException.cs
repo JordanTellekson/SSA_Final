@@ -1,3 +1,5 @@
+// Custom exception used to wrap scan-store persistence failures.
+
 namespace SSA_Final.Exceptions
 {
     /// <summary>

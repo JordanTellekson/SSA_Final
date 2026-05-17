@@ -1,3 +1,6 @@
+// Entity Framework-backed scan store implementation.
+// Persists scans and variant analysis records to the configured SQL database.
+
 using SSA_Final.Exceptions;
 using SSA_Final.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -124,6 +127,20 @@ namespace SSA_Final.Services
         {
             _logger.LogDebug("[SqlScanStoreService] Checking whether any scan records exist.");
             return await _dbContext.DomainScans.AnyAsync();
+        }
+
+        public async Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow)
+        {
+            var cutoff = DateTime.UtcNow - lookbackWindow;
+
+            return await _dbContext.DomainScans
+                .Include(scan => scan.Variants)
+                .Where(scan =>
+                    scan.Status == DomainScanStatus.Completed &&
+                    scan.NumMaliciousDomains > 0 &&
+                    (scan.TimeFinished ?? scan.CreatedAt) >= cutoff)
+                .OrderByDescending(scan => scan.TimeFinished ?? scan.CreatedAt)
+                .ToListAsync();
         }
 
         public async Task<bool> WasRecentlyScannedAsync(string domain, TimeSpan window)

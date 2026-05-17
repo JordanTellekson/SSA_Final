@@ -20,6 +20,8 @@ namespace SSA_Final.Services
         private readonly Lazy<List<string>> _knownLegitimateRootDomains;
         private readonly Lazy<Dictionary<int, List<string>>> _knownLegitimateRootsByLength;
         private readonly IPhishingBlocklistService? _blocklistService;
+        private readonly IDomainRegistrationLookupService? _registrationLookupService;
+        private readonly RiskThresholdOptions _riskThresholds;
 
         // ── Structural-risk data ──────────────────────────────────────────────
 
@@ -44,7 +46,7 @@ namespace SSA_Final.Services
             ISslCertificateChecker sslChecker,
             IConfiguration configuration,
             ILogger<DomainAnalyzerService> logger)
-            : this(httpClientFactory, sslChecker, configuration, logger, null, null)
+            : this(httpClientFactory, sslChecker, configuration, logger, null, null, null)
         {
         }
 
@@ -54,13 +56,16 @@ namespace SSA_Final.Services
             IConfiguration configuration,
             ILogger<DomainAnalyzerService> logger,
             IWebHostEnvironment? hostEnvironment,
-            IPhishingBlocklistService? blocklistService)
+            IPhishingBlocklistService? blocklistService,
+            IDomainRegistrationLookupService? registrationLookupService = null)
         {
             _httpClientFactory = httpClientFactory;
             _sslChecker = sslChecker;
             _logger = logger;
             _blocklistService = blocklistService;
+            _registrationLookupService = registrationLookupService;
             _timeoutSeconds = configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds", 5);
+            _riskThresholds = RiskThresholdOptions.FromConfiguration(configuration);
 
             var contentRoot = hostEnvironment?.ContentRootPath ?? Directory.GetCurrentDirectory();
             _legitimateDomainsFilePath = Path.Combine(contentRoot, "Legitimate_Domains.txt");
@@ -134,15 +139,15 @@ namespace SSA_Final.Services
                 }
 
                 AddRiskIndicators(domain, riskResult, indicators);
+                var structuralIndicatorCount = indicators.Count;
 
                 // Passes 1–3 — Network checks (redirect, SSL, HTML content).
                 await RunNetworkChecksAsync(domain, indicators);
 
                 riskResult.Indicators = indicators;
-                riskResult.IsSuspicious = indicators.Count > 0 || riskResult.OverallRiskScore > 0;
-                riskResult.Summary = riskResult.IsSuspicious
-                    ? $"Domain flagged with {indicators.Count} indicator(s), risk score {riskResult.OverallRiskScore}: {string.Join("; ", indicators)}."
-                    : "No phishing indicators detected.";
+                var hasNetworkIndicators = indicators.Count > structuralIndicatorCount;
+                riskResult.IsSuspicious = hasNetworkIndicators || IsRiskScoreSuspicious(riskResult.OverallRiskScore);
+                riskResult.Summary = BuildAnalysisSummary(riskResult, indicators);
                 riskResult.AnalysedAt = DateTime.UtcNow;
                 riskResult.DiscoveredDomain = domain;
 
@@ -207,7 +212,7 @@ namespace SSA_Final.Services
 
                     var blocklistSignal = new DomainRiskSignalScore(
                         "Blocklist Match",
-                        100,
+                        _riskThresholds.BlocklistMatchScore,
                         true,
                         $"Domain found in {blocklistResult.Source} feed.");
 
@@ -219,13 +224,21 @@ namespace SSA_Final.Services
                         DiscoveredDomain = normalizedInput,
                         IsKnownActiveDomain = false,
                         IsValidDomain = true,
-                        OverallRiskScore = 100,
+                        OverallRiskScore = _riskThresholds.BlocklistMatchScore,
+                        RiskClassification = DomainAnalysisResult.ClassifyRiskScore(_riskThresholds.BlocklistMatchScore),
+                        TopRiskSignal = blocklistSignal.Signal,
+                        TopRiskSignalScore = blocklistSignal.Score,
+                        TopRiskSignalDetail = blocklistSignal.Detail,
                         TyposquattingEditDistance = blocklistSignal,
                         ExcessiveSubdomains = blocklistSignal,
                         HyphenAbuse = blocklistSignal,
                         ShannonEntropy = blocklistSignal,
                         RepeatedSegment = emptySignal,
                         KeywordAbuse = emptySignal,
+                        DomainRegistrationAge = emptySignal,
+                        DomainRegistrationLifespan = emptySignal,
+                        WhoisPrivacyProtection = emptySignal,
+                        CharacterCompositionAnomaly = emptySignal,
                         IsBlocklistMatch = true,
                         BlocklistSource = blocklistResult.Source,
                         UsedBlocklistFallback = blocklistResult.IsStale,
@@ -253,11 +266,39 @@ namespace SSA_Final.Services
                 var keywordAbuse = CalculateKeywordAbuseScore(normalizedInput);
                 LogSignal(normalizedInput, keywordAbuse);
 
-                // Cap at 100 so structural signals share the same ceiling as a blocklist match.
-                var overallRisk = Math.Min(100, typosquatting.Score + subdomain.Score + hyphen.Score
-                    + entropy.Score + repeatedSegment.Score + keywordAbuse.Score);
+                var registrationMetadata = await LookupRegistrationMetadataAsync(normalizedInput);
 
-                var triggeredSignals = new[] { typosquatting, subdomain, hyphen, entropy, repeatedSegment, keywordAbuse }
+                var registrationAge = CalculateRegistrationAgeScore(registrationMetadata);
+                LogSignal(normalizedInput, registrationAge);
+
+                var registrationLifespan = CalculateRegistrationLifespanScore(registrationMetadata);
+                LogSignal(normalizedInput, registrationLifespan);
+
+                var whoisPrivacy = CalculateWhoisPrivacyScore(registrationMetadata);
+                LogSignal(normalizedInput, whoisPrivacy);
+
+                var characterComposition = CalculateCharacterCompositionScore(normalizedInput);
+                LogSignal(normalizedInput, characterComposition);
+
+                var signals = new[]
+                {
+                    typosquatting,
+                    subdomain,
+                    hyphen,
+                    entropy,
+                    repeatedSegment,
+                    keywordAbuse,
+                    registrationAge,
+                    registrationLifespan,
+                    whoisPrivacy,
+                    characterComposition
+                };
+
+                // Cap at 100 so additive heuristic signals share the same ceiling
+                // as a high-confidence blocklist match.
+                var overallRisk = Math.Min(100, signals.Sum(signal => signal.Score));
+
+                var triggeredSignals = signals
                     .Where(signal => signal.Triggered)
                     .Select(signal => signal.Signal)
                     .ToArray();
@@ -275,28 +316,41 @@ namespace SSA_Final.Services
                         normalizedInput);
                 }
 
-                return new DomainAnalysisResult
+                var isSuspicious = IsRiskScoreSuspicious(overallRisk);
+
+                var result = new DomainAnalysisResult
                 {
                     InputDomain = normalizedInput,
                     DiscoveredDomain = normalizedInput,
                     IsKnownActiveDomain = false,
                     IsValidDomain = true,
                     OverallRiskScore = overallRisk,
+                    RiskClassification = DomainAnalysisResult.ClassifyRiskScore(overallRisk),
                     TyposquattingEditDistance = typosquatting,
                     ExcessiveSubdomains = subdomain,
                     HyphenAbuse = hyphen,
                     ShannonEntropy = entropy,
                     RepeatedSegment = repeatedSegment,
                     KeywordAbuse = keywordAbuse,
+                    DomainRegistrationAge = registrationAge,
+                    DomainRegistrationLifespan = registrationLifespan,
+                    WhoisPrivacyProtection = whoisPrivacy,
+                    CharacterCompositionAnomaly = characterComposition,
+                    RegistrationLookupFailureReason = registrationMetadata.FailureReason,
                     IsBlocklistMatch = false,
                     BlocklistSource = null,
                     UsedBlocklistFallback = blocklistResult.IsStale,
-                    IsSuspicious = overallRisk > 0,
-                    Summary = overallRisk > 0
+                    IsSuspicious = isSuspicious,
+                    Summary = isSuspicious
                         ? "Structural risk indicators detected."
+                        : overallRisk > 0
+                        ? $"Structural risk score {overallRisk} is below suspicious threshold {_riskThresholds.EffectiveSuspiciousMinScore}."
                         : "No structural risk indicators detected.",
                     AnalysedAt = DateTime.UtcNow
                 };
+
+                result.ApplyTopRiskSignal(signals);
+                return result;
             }
             catch (Exception ex)
             {
@@ -321,6 +375,28 @@ namespace SSA_Final.Services
             return _blocklistService.CheckAsync(domain);
         }
 
+        private bool IsRiskScoreSuspicious(int overallRiskScore)
+        {
+            return overallRiskScore >= _riskThresholds.EffectiveSuspiciousMinScore;
+        }
+
+        private string BuildAnalysisSummary(
+            DomainAnalysisResult riskResult,
+            IReadOnlyCollection<string> indicators)
+        {
+            if (riskResult.IsSuspicious)
+            {
+                return $"Domain flagged with {indicators.Count} indicator(s), risk score {riskResult.OverallRiskScore}: {string.Join("; ", indicators)}.";
+            }
+
+            if (indicators.Count > 0)
+            {
+                return $"Domain has {indicators.Count} structural indicator(s), but risk score {riskResult.OverallRiskScore} is below suspicious threshold {_riskThresholds.EffectiveSuspiciousMinScore}: {string.Join("; ", indicators)}.";
+            }
+
+            return "No phishing indicators detected.";
+        }
+
         // ── Pass 0: Structural risk checks ────────────────────────────────────
 
         private void AddRiskIndicators(string domain, DomainAnalysisResult riskResult, List<string> indicators)
@@ -332,7 +408,11 @@ namespace SSA_Final.Services
                 riskResult.HyphenAbuse,
                 riskResult.ShannonEntropy,
                 riskResult.RepeatedSegment,
-                riskResult.KeywordAbuse
+                riskResult.KeywordAbuse,
+                riskResult.DomainRegistrationAge,
+                riskResult.DomainRegistrationLifespan,
+                riskResult.WhoisPrivacyProtection,
+                riskResult.CharacterCompositionAnomaly
             };
 
             foreach (var signal in signals)
@@ -395,9 +475,9 @@ namespace SSA_Final.Services
 
             var score = minDistance switch
             {
-                1 => 25,
-                2 => 18,
-                3 => 10,
+                1 => _riskThresholds.Typosquatting.EditDistanceOne,
+                2 => _riskThresholds.Typosquatting.EditDistanceTwo,
+                3 => _riskThresholds.Typosquatting.EditDistanceThree,
                 _ => 0
             };
 
@@ -410,7 +490,7 @@ namespace SSA_Final.Services
                     : "No suspicious root-label edit-distance match detected.");
         }
 
-        private static DomainRiskSignalScore CalculateSubdomainScore(string normalizedDomain)
+        private DomainRiskSignalScore CalculateSubdomainScore(string normalizedDomain)
         {
             var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
             var subdomainCount = Math.Max(labels.Length - 2, 0);
@@ -418,9 +498,9 @@ namespace SSA_Final.Services
             var score = subdomainCount switch
             {
                 <= 1 => 0,
-                2 => 8,
-                3 => 16,
-                _ => 25
+                2 => _riskThresholds.Subdomains.TwoSubdomains,
+                3 => _riskThresholds.Subdomains.ThreeSubdomains,
+                _ => _riskThresholds.Subdomains.FourOrMoreSubdomains
             };
 
             return new DomainRiskSignalScore(
@@ -432,7 +512,7 @@ namespace SSA_Final.Services
 
         // Counts hyphens in the registrable label only. Hyphens that appear in subdomain prefixes
         // are covered by the KeywordAbuse signal and should not inflate the hyphen score.
-        private static DomainRiskSignalScore CalculateHyphenScore(string normalizedDomain)
+        private DomainRiskSignalScore CalculateHyphenScore(string normalizedDomain)
         {
             var rootLabel = GetRootDomainLabel(normalizedDomain);
 
@@ -442,15 +522,17 @@ namespace SSA_Final.Services
             var score = hyphenCount switch
             {
                 0 => 0,
-                1 => 6,
-                2 => 12,
-                3 => 18,
-                _ => 25
+                1 => _riskThresholds.HyphenAbuse.OneHyphen,
+                2 => _riskThresholds.HyphenAbuse.TwoHyphens,
+                3 => _riskThresholds.HyphenAbuse.ThreeHyphens,
+                _ => _riskThresholds.HyphenAbuse.FourOrMoreHyphens
             };
 
             if (repeatedPatternCount > 0)
             {
-                score = Math.Min(25, score + repeatedPatternCount * 2);
+                score = Math.Min(
+                    _riskThresholds.HyphenAbuse.MaxScore,
+                    score + repeatedPatternCount * _riskThresholds.HyphenAbuse.RepeatedHyphenBonus);
             }
 
             return new DomainRiskSignalScore(
@@ -462,7 +544,7 @@ namespace SSA_Final.Services
 
         // Computes Shannon entropy on the registrable label only. Using the full domain string
         // (including TLD characters) inflates low-entropy scores and dilutes genuine DGA signals.
-        private static DomainRiskSignalScore CalculateEntropyScore(string normalizedDomain)
+        private DomainRiskSignalScore CalculateEntropyScore(string normalizedDomain)
         {
             var rootLabel = GetRootDomainLabel(normalizedDomain);
             var sample = new string(rootLabel.Where(char.IsLetterOrDigit).ToArray());
@@ -471,15 +553,17 @@ namespace SSA_Final.Services
             var score = entropy switch
             {
                 < 3.0 => 0,
-                < 3.4 => 8,
-                < 3.8 => 16,
-                _ => 25
+                < 3.4 => _riskThresholds.ShannonEntropy.ModerateEntropy,
+                < 3.8 => _riskThresholds.ShannonEntropy.HighEntropy,
+                _ => _riskThresholds.ShannonEntropy.VeryHighEntropy
             };
 
             // Long, high-entropy labels are a strong DGA signal.
             if (rootLabel.Length >= 15 && entropy >= 3.5)
             {
-                score = Math.Min(25, score + 4);
+                score = Math.Min(
+                    _riskThresholds.ShannonEntropy.MaxScore,
+                    score + _riskThresholds.ShannonEntropy.LongLabelBonus);
             }
 
             return new DomainRiskSignalScore(
@@ -492,7 +576,7 @@ namespace SSA_Final.Services
         // Detects consecutive repeated tokens in the subdomain chain (e.g., login.login.paypal.com)
         // or in the hyphen-delimited registrable label (e.g., login-login-paypal.com).
         // These patterns are almost exclusively machine-generated noise or low-effort spam.
-        private static DomainRiskSignalScore CalculateRepeatedSegmentScore(string normalizedDomain)
+        private DomainRiskSignalScore CalculateRepeatedSegmentScore(string normalizedDomain)
         {
             var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
             var consecutiveRepeatCount = 0;
@@ -523,8 +607,8 @@ namespace SSA_Final.Services
             var score = consecutiveRepeatCount switch
             {
                 0 => 0,
-                1 => 20,
-                _ => 25
+                1 => _riskThresholds.RepeatedSegment.OneRepeatedSegment,
+                _ => _riskThresholds.RepeatedSegment.MultipleRepeatedSegments
             };
 
             return new DomainRiskSignalScore(
@@ -539,7 +623,7 @@ namespace SSA_Final.Services
         // Detects known phishing keywords embedded in the registrable label or any subdomain label.
         // Keyword presence in the registrable label (e.g., loginpaypal.com, paypal-login.com) is
         // scored higher than keywords appearing only in subdomain prefixes (e.g., login.paypal.com).
-        private static DomainRiskSignalScore CalculateKeywordAbuseScore(string normalizedDomain)
+        private DomainRiskSignalScore CalculateKeywordAbuseScore(string normalizedDomain)
         {
             var labels = normalizedDomain.Split('.', StringSplitOptions.RemoveEmptyEntries);
             if (labels.Length < 2)
@@ -560,7 +644,7 @@ namespace SSA_Final.Services
             {
                 if (rootLabel.Contains(keyword, StringComparison.OrdinalIgnoreCase))
                 {
-                    score += 15;
+                    score += _riskThresholds.KeywordAbuse.RootLabelKeyword;
                     matchedKeywords.Add($"'{keyword}' in label");
                     break; // One label-level keyword match is sufficient.
                 }
@@ -573,14 +657,14 @@ namespace SSA_Final.Services
                 {
                     if (subLabel.Contains(keyword, StringComparison.OrdinalIgnoreCase))
                     {
-                        score += 10;
+                        score += _riskThresholds.KeywordAbuse.SubdomainKeyword;
                         matchedKeywords.Add($"'{keyword}' in subdomain");
                         break; // One keyword per subdomain label is sufficient.
                     }
                 }
             }
 
-            score = Math.Min(25, score);
+            score = Math.Min(_riskThresholds.KeywordAbuse.MaxScore, score);
 
             return new DomainRiskSignalScore(
                 "Keyword Abuse",
@@ -589,6 +673,264 @@ namespace SSA_Final.Services
                 score > 0
                     ? $"Phishing keyword(s) detected: {string.Join(", ", matchedKeywords)}."
                     : "No phishing keyword patterns detected.");
+        }
+
+        private async Task<DomainRegistrationMetadata> LookupRegistrationMetadataAsync(string normalizedDomain)
+        {
+            if (_registrationLookupService is null)
+            {
+                return new DomainRegistrationMetadata
+                {
+                    Domain = normalizedDomain,
+                    IsLookupSuccessful = false,
+                    FailureReason = "Registration lookup service is not configured."
+                };
+            }
+
+            var metadata = await _registrationLookupService.LookupAsync(normalizedDomain);
+            if (!metadata.IsLookupSuccessful)
+            {
+                _logger.LogInformation(
+                    "[DomainAnalyzerService] Registration lookup unavailable for {Domain}: {Reason}",
+                    normalizedDomain,
+                    metadata.FailureReason);
+            }
+
+            return metadata;
+        }
+
+        // New domains are a strong phishing signal, but the lookup can be unavailable
+        // for some TLDs. Missing registration data is recorded, not scored as risk.
+        private DomainRiskSignalScore CalculateRegistrationAgeScore(
+            DomainRegistrationMetadata metadata)
+        {
+            if (!metadata.IsLookupSuccessful)
+            {
+                return new DomainRiskSignalScore(
+                    "Domain Registration Age",
+                    0,
+                    false,
+                    $"Registration lookup unavailable: {metadata.FailureReason ?? "unknown reason"}");
+            }
+
+            if (!metadata.CreationDateUtc.HasValue)
+            {
+                return new DomainRiskSignalScore(
+                    "Domain Registration Age",
+                    0,
+                    false,
+                    "Creation date unavailable in registration data.");
+            }
+
+            var createdAt = metadata.CreationDateUtc.Value;
+            var ageDays = Math.Floor((DateTime.UtcNow - createdAt).TotalDays);
+            if (ageDays < 0)
+            {
+                return new DomainRiskSignalScore(
+                    "Domain Registration Age",
+                    0,
+                    false,
+                    $"Creation date {createdAt:yyyy-MM-dd} appears to be in the future.");
+            }
+
+            var score = ageDays switch
+            {
+                <= 30 => _riskThresholds.DomainRegistrationAge.ThirtyDaysOrLess,
+                <= 90 => _riskThresholds.DomainRegistrationAge.NinetyDaysOrLess,
+                _ => 0
+            };
+
+            return new DomainRiskSignalScore(
+                "Domain Registration Age",
+                score,
+                score > 0,
+                score > 0
+                    ? $"Domain was registered {ageDays:N0} day(s) ago on {createdAt:yyyy-MM-dd}."
+                    : $"Domain registration age is {ageDays:N0} day(s); no recent-registration signal.");
+        }
+
+        // Short registration windows are a weaker signal than creation age because
+        // many legitimate domains renew annually. It still adds context when paired
+        // with stronger structural or registration-age evidence.
+        private DomainRiskSignalScore CalculateRegistrationLifespanScore(
+            DomainRegistrationMetadata metadata)
+        {
+            if (!metadata.IsLookupSuccessful)
+            {
+                return new DomainRiskSignalScore(
+                    "Domain Registration Lifespan",
+                    0,
+                    false,
+                    $"Registration lookup unavailable: {metadata.FailureReason ?? "unknown reason"}");
+            }
+
+            if (!metadata.CreationDateUtc.HasValue || !metadata.ExpirationDateUtc.HasValue)
+            {
+                return new DomainRiskSignalScore(
+                    "Domain Registration Lifespan",
+                    0,
+                    false,
+                    "Creation or expiration date unavailable in registration data.");
+            }
+
+            var lifespanDays = Math.Floor(
+                (metadata.ExpirationDateUtc.Value - metadata.CreationDateUtc.Value).TotalDays);
+            if (lifespanDays <= 0)
+            {
+                return new DomainRiskSignalScore(
+                    "Domain Registration Lifespan",
+                    0,
+                    false,
+                    "Registration dates are incomplete or inconsistent.");
+            }
+
+            var score = lifespanDays switch
+            {
+                <= 370 => _riskThresholds.DomainRegistrationLifespan.OneYearOrLess,
+                <= 730 => _riskThresholds.DomainRegistrationLifespan.TwoYearsOrLess,
+                _ => 0
+            };
+
+            return new DomainRiskSignalScore(
+                "Domain Registration Lifespan",
+                score,
+                score > 0,
+                score > 0
+                    ? $"Registration lifespan is approximately {lifespanDays:N0} day(s)."
+                    : $"Registration lifespan is approximately {lifespanDays:N0} day(s); no short-lifespan signal.");
+        }
+
+        // Privacy protection is common and not malicious by itself, so it is kept as
+        // a small signal that can reinforce stronger evidence without dominating it.
+        private DomainRiskSignalScore CalculateWhoisPrivacyScore(
+            DomainRegistrationMetadata metadata)
+        {
+            if (!metadata.IsLookupSuccessful)
+            {
+                return new DomainRiskSignalScore(
+                    "WHOIS Privacy Protection",
+                    0,
+                    false,
+                    $"Registration lookup unavailable: {metadata.FailureReason ?? "unknown reason"}");
+            }
+
+            return new DomainRiskSignalScore(
+                "WHOIS Privacy Protection",
+                metadata.HasPrivacyProtection ? _riskThresholds.WhoisPrivacyProtection.PrivacyProtected : 0,
+                metadata.HasPrivacyProtection,
+                metadata.HasPrivacyProtection
+                    ? "Registration data appears redacted, withheld, or privacy-protected."
+                    : "No privacy-protection marker detected in registration data.");
+        }
+
+        // Looks at measurable character ratios instead of curated keyword or TLD lists.
+        // This complements Shannon entropy by explaining why a label looks unnatural.
+        private DomainRiskSignalScore CalculateCharacterCompositionScore(
+            string normalizedDomain)
+        {
+            var rootLabel = GetRootDomainLabel(normalizedDomain);
+            if (string.IsNullOrWhiteSpace(rootLabel))
+            {
+                return new DomainRiskSignalScore(
+                    "Character Composition Anomaly",
+                    0,
+                    false,
+                    "No root label available for character composition analysis.");
+            }
+
+            var alphanumeric = rootLabel.Where(char.IsLetterOrDigit).ToArray();
+            if (alphanumeric.Length == 0)
+            {
+                return new DomainRiskSignalScore(
+                    "Character Composition Anomaly",
+                    0,
+                    false,
+                    "No alphanumeric characters available for character composition analysis.");
+            }
+
+            var digitRatio = (double)alphanumeric.Count(char.IsDigit) / alphanumeric.Length;
+            var letters = alphanumeric.Where(char.IsLetter).ToArray();
+            var consonantRatio = letters.Length == 0
+                ? 0
+                : (double)letters.Count(IsConsonant) / letters.Length;
+            var longestRepeatedRun = GetLongestRepeatedRun(rootLabel);
+
+            var score = 0;
+            var reasons = new List<string>();
+
+            if (digitRatio >= 0.50)
+            {
+                score += _riskThresholds.CharacterCompositionAnomaly.HighDigitRatio;
+                reasons.Add($"digit ratio {digitRatio:P0}");
+            }
+            else if (digitRatio >= 0.30)
+            {
+                score += _riskThresholds.CharacterCompositionAnomaly.ModerateDigitRatio;
+                reasons.Add($"digit ratio {digitRatio:P0}");
+            }
+
+            if (letters.Length >= 6 && consonantRatio >= 0.85)
+            {
+                score += _riskThresholds.CharacterCompositionAnomaly.HighConsonantRatio;
+                reasons.Add($"consonant ratio {consonantRatio:P0}");
+            }
+
+            if (longestRepeatedRun >= 5)
+            {
+                score += _riskThresholds.CharacterCompositionAnomaly.LongRepeatedRun;
+                reasons.Add($"repeated character run of {longestRepeatedRun}");
+            }
+            else if (longestRepeatedRun >= 4)
+            {
+                score += _riskThresholds.CharacterCompositionAnomaly.ModerateRepeatedRun;
+                reasons.Add($"repeated character run of {longestRepeatedRun}");
+            }
+
+            if (rootLabel.Length >= 24)
+            {
+                score += _riskThresholds.CharacterCompositionAnomaly.LongLabel;
+                reasons.Add($"root label length {rootLabel.Length}");
+            }
+
+            score = Math.Min(_riskThresholds.CharacterCompositionAnomaly.MaxScore, score);
+
+            return new DomainRiskSignalScore(
+                "Character Composition Anomaly",
+                score,
+                score > 0,
+                score > 0
+                    ? $"Composition anomaly detected: {string.Join(", ", reasons)}."
+                    : "No character composition anomaly detected.");
+        }
+
+        private static bool IsConsonant(char value)
+        {
+            var c = char.ToLowerInvariant(value);
+            return c is >= 'a' and <= 'z' && !"aeiou".Contains(c);
+        }
+
+        private static int GetLongestRepeatedRun(string value)
+        {
+            var longest = 0;
+            var current = 0;
+            char? previous = null;
+
+            foreach (var c in value)
+            {
+                if (previous.HasValue && c == previous.Value)
+                {
+                    current++;
+                }
+                else
+                {
+                    current = 1;
+                    previous = c;
+                }
+
+                longest = Math.Max(longest, current);
+            }
+
+            return longest;
         }
 
         private static string GetRootDomainLabel(string normalizedDomain)
@@ -776,12 +1118,18 @@ namespace SSA_Final.Services
                 IsKnownActiveDomain = false,
                 IsValidDomain = !string.IsNullOrWhiteSpace(safeDomain),
                 OverallRiskScore = 0,
+                RiskClassification = DomainAnalysisResult.ClassifyRiskScore(0),
                 TyposquattingEditDistance = emptySignal,
                 ExcessiveSubdomains = emptySignal,
                 HyphenAbuse = emptySignal,
                 ShannonEntropy = emptySignal,
                 RepeatedSegment = emptySignal,
                 KeywordAbuse = emptySignal,
+                DomainRegistrationAge = emptySignal,
+                DomainRegistrationLifespan = emptySignal,
+                WhoisPrivacyProtection = emptySignal,
+                CharacterCompositionAnomaly = emptySignal,
+                RegistrationLookupFailureReason = "Analyzer fallback due to internal error.",
                 IsBlocklistMatch = false,
                 UsedBlocklistFallback = true,
                 IsSuspicious = false,
@@ -801,12 +1149,18 @@ namespace SSA_Final.Services
                 IsKnownActiveDomain = false,
                 IsValidDomain = false,
                 OverallRiskScore = 0,
+                RiskClassification = DomainAnalysisResult.ClassifyRiskScore(0),
                 TyposquattingEditDistance = emptySignal,
                 ExcessiveSubdomains = emptySignal,
                 HyphenAbuse = emptySignal,
                 ShannonEntropy = emptySignal,
                 RepeatedSegment = emptySignal,
                 KeywordAbuse = emptySignal,
+                DomainRegistrationAge = emptySignal,
+                DomainRegistrationLifespan = emptySignal,
+                WhoisPrivacyProtection = emptySignal,
+                CharacterCompositionAnomaly = emptySignal,
+                RegistrationLookupFailureReason = "Invalid input.",
                 IsBlocklistMatch = false,
                 IsSuspicious = false,
                 Summary = "No domain supplied - analysis skipped.",
@@ -825,12 +1179,17 @@ namespace SSA_Final.Services
                 IsKnownActiveDomain = true,
                 IsValidDomain = true,
                 OverallRiskScore = 0,
+                RiskClassification = DomainAnalysisResult.ClassifyRiskScore(0),
                 TyposquattingEditDistance = noRisk,
                 ExcessiveSubdomains = noRisk,
                 HyphenAbuse = noRisk,
                 ShannonEntropy = noRisk,
                 RepeatedSegment = noRisk,
                 KeywordAbuse = noRisk,
+                DomainRegistrationAge = noRisk,
+                DomainRegistrationLifespan = noRisk,
+                WhoisPrivacyProtection = noRisk,
+                CharacterCompositionAnomaly = noRisk,
                 IsBlocklistMatch = false,
                 IsSuspicious = false,
                 Summary = "Domain found in active-domain list.",
