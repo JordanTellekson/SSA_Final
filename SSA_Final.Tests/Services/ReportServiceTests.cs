@@ -77,6 +77,18 @@ internal sealed class FakeReportScanStore : IScanStore
     {
         throw new NotSupportedException();
     }
+
+    public Task<IReadOnlyList<DomainScan>> GetRecentHighRiskAsync(DateTime since, int minSuspiciousVariants)
+    {
+        var scans = _scans
+            .Where(scan =>
+                scan.Status == DomainScanStatus.Completed &&
+                (scan.TimeFinished ?? scan.CreatedAt) >= since &&
+                scan.NumMaliciousDomains >= minSuspiciousVariants)
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<DomainScan>>(scans);
+    }
 }
 
 public class ReportServiceTests

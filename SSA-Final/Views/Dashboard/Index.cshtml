@@ -6,30 +6,80 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<h1>Dashboard</h1>
-<p class="text-muted">Enter a base domain to scan for typosquatting variants.</p>
+<div class="page-header mb-4">
+    <h1 class="display-5">Dashboard</h1>
+    <p>Submit a domain to begin scanning for typosquatting threats.</p>
+</div>
 
-@if (TempData["ScanError"] is string scanError)
-{
-    <div class="alert alert-danger" role="alert">@scanError</div>
-}
-
-@using (Html.BeginForm("Index", "Dashboard", FormMethod.Post))
-{
-    @Html.AntiForgeryToken()
-
-    <div class="form-group mb-3">
-        <label class="form-label">Base Domain</label>
-        @Html.TextBoxFor(m => m.Domain, new
-        {
-            @class = "form-control",
-            placeholder = "example.com"
-        })
-        @Html.ValidationMessageFor(m => m.Domain, "", new { @class = "text-danger" })
+@* Primary scan card: split layout *@
+<div class="card shadow-sm border-0 rounded-4 mb-4">
+    <div class="card-body p-4 p-lg-5">
+        <div class="row align-items-center g-4">
+            <div class="col-lg-5">
+                <h2 class="fw-bold h4 mb-2">Start a new scan</h2>
+                <p class="text-muted mb-0">
+                    Enter a base domain below. Our engine will generate typosquatting variants and
+                    analyse each one for suspicious signals, returning a risk score and detailed indicators.
+                </p>
+            </div>
+            <div class="col-lg-1 d-none d-lg-flex justify-content-center">
+                <div class="vr" style="height: 100px; opacity: 0.15;"></div>
+            </div>
+            <div class="col-lg-6">
+                @if (TempData["ScanError"] is string scanError)
+                {
+                    <div class="alert alert-danger" role="alert">@scanError</div>
+                }
+                @using (Html.BeginForm("Index", "Dashboard", FormMethod.Post))
+                {
+                    @Html.AntiForgeryToken()
+                    <div class="form-group mb-3">
+                        <label class="form-label fw-semibold">Base Domain</label>
+                        @Html.TextBoxFor(m => m.Domain, new
+                        {
+                            @class = "form-control form-control-lg",
+                            placeholder = "example.com"
+                        })
+                        @Html.ValidationMessageFor(m => m.Domain, "", new { @class = "text-danger small mt-1" })
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg px-4">Start Scan</button>
+                }
+            </div>
+        </div>
     </div>
+</div>
 
-    <button type="submit" class="btn btn-primary">Start Scan</button>
-}
+@* How it works: three step cards *@
+<p class="text-uppercase text-muted fw-semibold small mb-3" style="letter-spacing: 0.08em;">How it works</p>
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 rounded-4">
+            <div class="card-body p-4">
+                <span class="badge text-bg-primary rounded-pill mb-3">1</span>
+                <h5 class="fw-semibold mb-2">Submit a domain</h5>
+                <p class="text-muted mb-0 small">Enter any base domain and kick off a scan. Results are queued and processed automatically in the background.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 rounded-4">
+            <div class="card-body p-4">
+                <span class="badge text-bg-primary rounded-pill mb-3">2</span>
+                <h5 class="fw-semibold mb-2">Automated analysis</h5>
+                <p class="text-muted mb-0 small">Variants are generated and checked against threat signals to produce a weighted risk classification for each.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100 shadow-sm border-0 rounded-4">
+            <div class="card-body p-4">
+                <span class="badge text-bg-primary rounded-pill mb-3">3</span>
+                <h5 class="fw-semibold mb-2">Review results</h5>
+                <p class="text-muted mb-0 small">Browse your scan results to surface suspicious domains, review threat indicators, and take action with confidence.</p>
+            </div>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
     @await Html.PartialAsync("_ValidationScriptsPartial")

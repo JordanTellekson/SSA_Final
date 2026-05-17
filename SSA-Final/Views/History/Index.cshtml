@@ -8,7 +8,10 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<h1>Scan History</h1>
+<div class="page-header mb-4">
+    <h1 class="display-5">Scan History</h1>
+    <p>A complete archive of all past scans, grouped by date.</p>
+</div>
 
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
     @await Html.PartialAsync("_Filters", Model.Filters)
