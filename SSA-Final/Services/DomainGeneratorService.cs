@@ -12,11 +12,11 @@ namespace SSA_Final.Services
         // Subdomain depth cap: real phishing campaigns rarely exceed 2 stacked prefix labels.
         private const int MaxAddedSubdomains = 2;
 
-        // Hyphen insertion cap: more than 3 injected hyphens produces implausible labels.
+        // Extra hyphen insertion cap: more than 3 injected hyphens produces implausible labels.
         private const int MaxAddedHyphens = 3;
 
-        // Per-domain cap on hyphen-insertion variants.
-        private const int MaxHyphenVariantsPerDomain = 100;
+        // Per-label cap on extra-hyphen variants.
+        private const int MaxHyphenVariantsPerLabel = 250;
 
         private static readonly string[] CommonTlds =
         [
@@ -163,8 +163,9 @@ namespace SSA_Final.Services
             var variations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             AddTyposquatting(subdomains, label, tld, variations);
-            AddHyphen(subdomains, label, tld, variations);
             AddSubdomains(subdomains, label, tld, variations);
+            AddHyphenExpansionsFromExistingVariants(variations);
+            AddHyphen(subdomains, label, tld, variations);
 
             // Remove the original input from the output set.
             variations.Remove(normalized);
@@ -183,8 +184,8 @@ namespace SSA_Final.Services
         }
 
         // Adds subdomain- and prefix-based lookalikes such as secure.example.com.
-        // Hyphen-prefix forms (e.g., login-paypal.com) are only emitted for single-prefix (depth=1)
-        // sequences; multi-segment hyphen chains (login-blog-paypal.com) are implausible phishing patterns.
+        // Hyphen-prefix forms cover one- and two-prefix sequences such as login-paypal.com
+        // and login-secure-paypal.com while avoiding deeper implausible chains.
         private static void AddSubdomains(string subdomains, string label, string tld, ISet<string> variations)
         {
             if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(tld))
@@ -226,23 +227,25 @@ namespace SSA_Final.Services
             }
         }
 
-        // Inserts additional hyphens into the label at each character gap.
+        // Inserts additional hyphens only next to hyphens already present in the label.
+        // This keeps clean labels like paypal.com from becoming pay-pal.com while allowing
+        // already-hyphenated variants such as secure-paypal.com -> secure--paypal.com.
         private static void AddHyphen(string subdomains, string label, string tld, ISet<string> variations)
         {
-            if (label.Length < 2)
+            if (label.Length < 2 || !label.Contains('-', StringComparison.Ordinal))
             {
                 return;
             }
 
-            var gaps = label.Length - 1;
+            var hyphenSlots = label.Count(ch => ch == '-');
             var created = 0;
 
             for (var hyphensToInsert = 1; hyphensToInsert <= MaxAddedHyphens; hyphensToInsert++)
             {
-                var distribution = new int[gaps];
+                var distribution = new int[hyphenSlots];
                 AddHyphenPatterns(0, hyphensToInsert, distribution);
 
-                if (created >= MaxHyphenVariantsPerDomain)
+                if (created >= MaxHyphenVariantsPerLabel)
                 {
                     break;
                 }
@@ -250,19 +253,19 @@ namespace SSA_Final.Services
 
             void AddHyphenPatterns(int gapIndex, int remaining, int[] distribution)
             {
-                if (created >= MaxHyphenVariantsPerDomain)
+                if (created >= MaxHyphenVariantsPerLabel)
                 {
                     return;
                 }
 
-                if (gapIndex == gaps)
+                if (gapIndex == hyphenSlots)
                 {
                     if (remaining != 0)
                     {
                         return;
                     }
 
-                    var mutated = BuildHyphenatedLabel(label, distribution);
+                    var mutated = BuildExtraHyphenatedLabel(label, distribution);
                     var domain = BuildDomain(subdomains, mutated, tld);
                     if (!string.IsNullOrWhiteSpace(domain) && variations.Add(domain))
                     {
@@ -277,13 +280,24 @@ namespace SSA_Final.Services
                     distribution[gapIndex] = insertionsAtGap;
                     AddHyphenPatterns(gapIndex + 1, remaining - insertionsAtGap, distribution);
 
-                    if (created >= MaxHyphenVariantsPerDomain)
+                    if (created >= MaxHyphenVariantsPerLabel)
                     {
                         break;
                     }
                 }
 
                 distribution[gapIndex] = 0;
+            }
+        }
+
+        private static void AddHyphenExpansionsFromExistingVariants(ISet<string> variations)
+        {
+            foreach (var domain in variations.ToArray())
+            {
+                if (SplitDomain(domain, out var subdomains, out var label, out var tld))
+                {
+                    AddHyphen(subdomains, label, tld, variations);
+                }
             }
         }
 
@@ -501,24 +515,27 @@ namespace SSA_Final.Services
             return true;
         }
 
-        private static string BuildHyphenatedLabel(string label, IReadOnlyList<int> distribution)
+        private static string BuildExtraHyphenatedLabel(string label, IReadOnlyList<int> distribution)
         {
-            if (distribution.Count != label.Length - 1)
+            if (distribution.Count != label.Count(ch => ch == '-'))
             {
                 return label;
             }
 
             var result = new System.Text.StringBuilder();
+            var hyphenSlot = 0;
             for (var i = 0; i < label.Length; i++)
             {
                 result.Append(label[i]);
-                if (i < label.Length - 1)
+                if (label[i] == '-')
                 {
-                    var hyphenCount = distribution[i];
+                    var hyphenCount = distribution[hyphenSlot];
                     if (hyphenCount > 0)
                     {
                         result.Append('-', hyphenCount);
                     }
+
+                    hyphenSlot++;
                 }
             }
 
