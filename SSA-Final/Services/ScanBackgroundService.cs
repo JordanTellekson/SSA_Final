@@ -188,10 +188,10 @@ namespace SSA_Final.Services
             {
                 List<DomainAnalysisResult> analysisResults;
 
-                if (scan.ScanTrigger is ScanTrigger.Manual or ScanTrigger.Scheduled)
+                if (scan.ScanTrigger is ScanTrigger.Manual or ScanTrigger.Scheduled or ScanTrigger.LegitimateBatch)
                 {
-                    // Manual and scheduled brand scans generate typosquat variants
-                    // and analyse each one. Feed ingestion stays direct below.
+                    // Brand-style scans generate typosquat variants and analyse each one.
+                    // Feed and CertStream ingestion stay direct below.
                     var variants = domainGenerator.GenerateVariations(scan.BaseDomain).ToList();
                     _logger.LogInformation(
                         "Scan {DomainScanId}: generated {Count} variant(s) for '{Domain}' ({Trigger}).",
@@ -233,8 +233,8 @@ namespace SSA_Final.Services
                 }
                 else
                 {
-                    // Feed, CertStream, and legitimate-domain batch scans are already
-                    // concrete domains, so skip variant generation and analyse directly.
+                    // Feed and CertStream scans are already concrete domains, so skip
+                    // variant generation and analyse directly.
                     _logger.LogDebug(
                         "Scan {DomainScanId}: trigger is {Trigger} — analysing '{Domain}' directly (no variant generation).",
                         scanId, scan.ScanTrigger, scan.BaseDomain);
