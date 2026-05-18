@@ -49,17 +49,22 @@ internal sealed class FakeReportScanStore : IScanStore
         return Task.FromResult(_scans.Count > 0);
     }
 
-    public Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow)
+    public Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow, int minMaliciousDomains = 0)
     {
         var cutoff = DateTime.UtcNow - lookbackWindow;
         var scans = _scans
             .Where(scan =>
                 scan.Status == DomainScanStatus.Completed &&
-                scan.NumMaliciousDomains > 0 &&
+                scan.NumMaliciousDomains >= minMaliciousDomains &&
                 (scan.TimeFinished ?? scan.CreatedAt) >= cutoff)
             .ToList();
 
         return Task.FromResult<IReadOnlyList<DomainScan>>(scans);
+    }
+
+    public Task<ScanStats> GetScanStatsAsync(CancellationToken ct = default)
+    {
+        throw new NotSupportedException();
     }
 
     public Task<IPagedResult<DomainScan>> GetPagedAsync(ScanQuery query)
@@ -76,6 +81,18 @@ internal sealed class FakeReportScanStore : IScanStore
     public Task<bool> WasRecentlyScannedAsync(string domain, TimeSpan window)
     {
         throw new NotSupportedException();
+    }
+
+    public Task<IReadOnlyList<DomainScan>> GetRecentHighRiskAsync(DateTime since, int minSuspiciousVariants)
+    {
+        var scans = _scans
+            .Where(scan =>
+                scan.Status == DomainScanStatus.Completed &&
+                (scan.TimeFinished ?? scan.CreatedAt) >= since &&
+                scan.NumMaliciousDomains >= minSuspiciousVariants)
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<DomainScan>>(scans);
     }
 }
 
@@ -110,10 +127,10 @@ public class ReportServiceTests
     }
 
     [Fact]
-    public async Task GenerateHighRiskAlertReport_FiltersToCompletedHighRiskScansInWindow()
+    public async Task GenerateHighRiskAlertReport_FiltersToCompletedScansInWindowRegardlessOfRisk()
     {
         var now = DateTime.UtcNow;
-        var included = MakeScan(
+        var highRisk = MakeScan(
             "paypal.com",
             now.AddHours(-2),
             1,
@@ -126,19 +143,22 @@ public class ReportServiceTests
                 TopRiskSignalDetail = "Close brand match."
             });
         var clean = MakeScan("example.com", now.AddHours(-1), 0);
-        var old = MakeScan("amazon.com", now.AddHours(-30), 1);
+        var tooOld = MakeScan("amazon.com", now.AddHours(-30), 1);
         var pending = MakeScan("microsoft.com", now.AddHours(-1), 1);
         pending.Status = DomainScanStatus.Pending;
 
         var service = new ReportService(
-            new FakeReportScanStore([included, clean, old, pending]),
+            new FakeReportScanStore([highRisk, clean, tooOld, pending]),
             BuildConfig());
 
         var first = await service.GenerateHighRiskAlertReportAsync();
         var second = await service.GenerateHighRiskAlertReportAsync();
 
-        Assert.Single(first.Items);
-        Assert.Equal(included.Id, first.Items[0].ScanId);
+        // Both completed scans within the window are included (clean + high-risk).
+        // Scans outside the window and non-completed scans are excluded.
+        Assert.Equal(2, first.Items.Count);
+        Assert.Contains(first.Items, item => item.ScanId == highRisk.Id);
+        Assert.Contains(first.Items, item => item.ScanId == clean.Id);
         Assert.Equal(first.Items.Select(item => item.ScanId), second.Items.Select(item => item.ScanId));
     }
 

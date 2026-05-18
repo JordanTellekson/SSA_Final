@@ -16,36 +16,45 @@
     };
 }
 
-<div class="d-flex align-items-center gap-3 mb-3">
-    <a asp-controller="ScanResults" asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; All Scans</a>
-    <h1 class="mb-0">@Model.BaseDomain</h1>
-    @if (isActive)
-    {
-        <span class="badge bg-primary fs-6">@Model.Status</span>
-    }
-    else if (Model.Status == DomainScanStatus.Failed)
-    {
-        <span class="badge bg-danger fs-6">Failed</span>
-    }
-    else if (Model.NumMaliciousDomains > 0)
-    {
-        <span class="badge bg-danger fs-6">@Model.NumMaliciousDomains suspicious</span>
-    }
-    else
-    {
-        <span class="badge bg-success fs-6">Clean</span>
-    }
+<div class="page-header mb-4">
+    <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-2">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <a asp-controller="ScanResults" asp-action="Index" class="btn btn-outline-light btn-sm">&larr; All Scans</a>
+            <h1 class="display-5 mb-0">@Model.BaseDomain</h1>
+            @if (isActive)
+            {
+                <span class="badge bg-primary fs-6">@Model.Status</span>
+            }
+            else if (Model.Status == DomainScanStatus.Failed)
+            {
+                <span class="badge bg-danger fs-6">Failed</span>
+            }
+            else if (Model.NumMaliciousDomains > 0)
+            {
+                <span class="badge bg-danger fs-6">@Model.NumMaliciousDomains suspicious</span>
+            }
+            else
+            {
+                <span class="badge bg-success fs-6">Clean</span>
+            }
+        </div>
+        @if (!isActive && Model.Status != DomainScanStatus.Failed && Model.Variants.Any())
+        {
+            <a href="/api/Reports/scan/@Model.Id/csv"
+               class="btn btn-outline-light btn-sm flex-shrink-0"
+               title="Export all variant data for this scan as CSV">
+                ↓ Export CSV
+            </a>
+        }
+    </div>
+    <p class="mb-0" style="color: rgba(255,255,255,0.7); font-size: 0.9rem;">
+        Created at @Model.CreatedAt.ToLocalTime().ToString("f") &nbsp;&middot;&nbsp;
+        Finished at @(Model.TimeFinished?.ToLocalTime().ToString("f") ?? "—") &nbsp;&middot;&nbsp;
+        Trigger: @Model.ScanTrigger &nbsp;&middot;&nbsp;
+        @Model.Variants.Count variant(s) analyzed &nbsp;&middot;&nbsp;
+        Scan ID: <code class="text-white-50">@Model.Id</code>
+    </p>
 </div>
-
-<p class="text-muted">
-    Created at @Model.CreatedAt.ToLocalTime().ToString("f") &nbsp;&middot;&nbsp;
-    Finished at @(Model.TimeFinished?.ToLocalTime().ToString("f") ?? "—") &nbsp;&middot;&nbsp;
-    Trigger: @Model.ScanTrigger &nbsp;&middot;&nbsp;
-    @Model.Variants.Count variant(s) analyzed &nbsp;&middot;&nbsp;
-    Scan ID: <code>@Model.Id</code>
-</p>
-
-<hr />
 
 @if (isActive)
 {
@@ -87,8 +96,8 @@ else if (!Model.Variants.Any())
 }
 else
 {
-    <table class="table table-bordered">
-        <thead class="table-light">
+    <table class="table table-bordered table-hover">
+        <thead class="table-dark">
             <tr>
                 <th>Discovered Domain</th>
                 <th>Status</th>

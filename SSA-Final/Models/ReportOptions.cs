@@ -4,7 +4,7 @@ namespace SSA_Final.Models
     {
         public const string SectionName = "Reports";
 
-        public double HighRiskLookbackHours { get; set; } = 24;
+        public double HighRiskLookbackHours { get; set; } = 720; // 30 days
 
         public TimeSpan GetLookbackWindow()
         {

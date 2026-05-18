@@ -59,7 +59,7 @@ namespace SSA_Final.Services
             lock (_lock) { return Task.FromResult(_scans.Count == 0); }
         }
 
-        public Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow)
+        public Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow, int minMaliciousDomains = 0)
         {
             var cutoff = DateTime.UtcNow - lookbackWindow;
 
@@ -68,7 +68,7 @@ namespace SSA_Final.Services
                 var scans = _scans
                     .Where(scan =>
                         scan.Status == DomainScanStatus.Completed &&
-                        scan.NumMaliciousDomains > 0 &&
+                        scan.NumMaliciousDomains >= minMaliciousDomains &&
                         (scan.TimeFinished ?? scan.CreatedAt) >= cutoff)
                     .OrderByDescending(scan => scan.TimeFinished ?? scan.CreatedAt)
                     .ToList();
@@ -151,6 +151,46 @@ namespace SSA_Final.Services
                     s.CreatedAt >= cutoff);
 
                 return Task.FromResult(result);
+            }
+        }
+
+        public Task<IReadOnlyList<DomainScan>> GetRecentHighRiskAsync(DateTime since, int minSuspiciousVariants)
+        {
+            lock (_lock)
+            {
+                IReadOnlyList<DomainScan> results = _scans
+                    .Where(s =>
+                        s.Status == DomainScanStatus.Completed &&
+                        s.TimeFinished >= since &&
+                        s.NumMaliciousDomains >= minSuspiciousVariants)
+                    .OrderByDescending(s => s.NumMaliciousDomains)
+                    .ToList();
+
+                return Task.FromResult(results);
+            }
+        }
+
+        public Task<ScanStats> GetScanStatsAsync(CancellationToken ct = default)
+        {
+            lock (_lock)
+            {
+                var triggerGroups = _scans
+                    .GroupBy(s => s.ScanTrigger.ToString())
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                var stats = new ScanStats
+                {
+                    TotalScans = _scans.Count,
+                    TotalVariantsAnalyzed = _scans.Sum(s => s.VariantCount),
+                    TotalSuspiciousVariants = _scans.Sum(s => s.NumMaliciousDomains),
+                    ScansWithThreats = _scans.Count(s => s.NumMaliciousDomains > 0),
+                    ActiveScans = _scans.Count(s =>
+                        s.Status == DomainScanStatus.Pending ||
+                        s.Status == DomainScanStatus.InProgress),
+                    ScansByTrigger = triggerGroups
+                };
+
+                return Task.FromResult(stats);
             }
         }
 

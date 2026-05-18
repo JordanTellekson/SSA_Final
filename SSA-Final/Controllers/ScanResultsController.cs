@@ -59,13 +59,17 @@ namespace SSA_Final.Controllers
                 return NotFound();
             }
 
-            foreach (var variant in scan.Variants)
+            var variants = await _scanStore.GetVariantsAsync(id, new VariantQuery());
+
+            foreach (var variant in variants)
             {
                 variant.DiscoveredDomain ??= string.Empty;
                 variant.Summary ??= string.Empty;
                 variant.Indicators ??= new List<string>();
                 variant.RiskClassification = DomainAnalysisResult.NormalizeRiskClassification(variant.RiskClassification);
             }
+
+            scan.Variants = variants.ToList();
 
             return View(scan);
         }

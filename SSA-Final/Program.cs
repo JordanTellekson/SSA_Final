@@ -64,6 +64,9 @@ if (builder.Configuration.GetValue("CertStream:Enabled", true))
 
 builder.Services.AddHostedService<ScheduledScanBackgroundService>();
 
+builder.Services.AddSingleton<IDomainFeedSource, OpenPhishFeedSource>();
+builder.Services.AddHostedService<FeedIngestionBackgroundService>();
+
 var timeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds");
 var timeoutSpan = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5);
 var rdapTimeoutSeconds = builder.Configuration.GetValue<int>("DomainAnalyzer:RdapTimeoutSeconds");
@@ -74,6 +77,13 @@ var blocklistTimeoutSpan = TimeSpan.FromSeconds(blocklistTimeoutSeconds > 0 ? bl
 builder.Services.AddHttpClient(PhishingBlocklistService.HttpClientName, client =>
 {
     client.Timeout = blocklistTimeoutSpan;
+});
+
+var feedSourceTimeoutSeconds = builder.Configuration.GetValue<int>("FeedSources:OpenPhish:TimeoutSeconds");
+var feedSourceTimeoutSpan = TimeSpan.FromSeconds(feedSourceTimeoutSeconds > 0 ? feedSourceTimeoutSeconds : 30);
+builder.Services.AddHttpClient(OpenPhishFeedSource.HttpClientName, client =>
+{
+    client.Timeout = feedSourceTimeoutSpan;
 });
 
 // In development, the DangerousAcceptAnyServerCertificateValidator bypass is intentionally
@@ -119,11 +129,13 @@ logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
 logger.LogInformation("Registered IReportService -> ReportService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
 logger.LogInformation("Registered IDomainRegistrationLookupService -> RdapDomainRegistrationLookupService (Scoped).");
-logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, DomainAnalyzer.Rdap, Blocklist.OpenPhish.");
+logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, DomainAnalyzer.Rdap, Blocklist.OpenPhish, FeedSource.OpenPhish.");
 logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
 logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
 logger.LogInformation("Registered CertStreamIngestionBackgroundService (IHostedService) when CertStream:Enabled is true.");
 logger.LogInformation("Registered ScheduledScanBackgroundService (IHostedService).");
+logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Singleton).");
+logger.LogInformation("Registered FeedIngestionBackgroundService (IHostedService).");
 
 // Configure Identity
 builder.Services.AddDefaultIdentity<IdentityUser>(options =>

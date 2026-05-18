@@ -84,7 +84,6 @@ namespace SSA_Final.Services
             try
             {
                 return _dbContext.DomainScans
-                    .Include(x => x.Variants)
                     .FirstOrDefault(x => x.Id == id);
             }
             catch (Exception ex)
@@ -130,7 +129,7 @@ namespace SSA_Final.Services
             return await _dbContext.DomainScans.AnyAsync();
         }
 
-        public async Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow)
+        public async Task<IReadOnlyList<DomainScan>> GetCompletedHighRiskScansAsync(TimeSpan lookbackWindow, int minMaliciousDomains = 0)
         {
             var cutoff = DateTime.UtcNow - lookbackWindow;
 
@@ -138,7 +137,7 @@ namespace SSA_Final.Services
                 .Include(scan => scan.Variants)
                 .Where(scan =>
                     scan.Status == DomainScanStatus.Completed &&
-                    scan.NumMaliciousDomains > 0 &&
+                    scan.NumMaliciousDomains >= minMaliciousDomains &&
                     (scan.TimeFinished ?? scan.CreatedAt) >= cutoff)
                 .OrderByDescending(scan => scan.TimeFinished ?? scan.CreatedAt)
                 .ToListAsync();
@@ -181,9 +180,10 @@ namespace SSA_Final.Services
             }
 
             // SEARCH path (must materialize for scoring)
+            // Capped at 500 rows to prevent full table scans on large datasets.
             if (!string.IsNullOrWhiteSpace(query.Query))
             {
-                var list = await scanned.ToListAsync();
+                var list = await scanned.Take(500).ToListAsync();
 
                 var results = _searchService.Search(list, query.Query).ToList();
 
@@ -222,6 +222,69 @@ namespace SSA_Final.Services
                 TotalCount = totalCount,
                 Page = query.Page,
                 PageSize = query.PageSize
+            };
+        }
+
+        public async Task<IReadOnlyList<DomainScan>> GetRecentHighRiskAsync(DateTime since, int minSuspiciousVariants)
+        {
+            _logger.LogDebug(
+                "[SqlScanStoreService] Retrieving high-risk scans since {Since} with minSuspiciousVariants={Min}.",
+                since,
+                minSuspiciousVariants);
+
+            try
+            {
+                return await _dbContext.DomainScans
+                    .Where(s =>
+                        s.Status == DomainScanStatus.Completed &&
+                        s.TimeFinished >= since &&
+                        s.NumMaliciousDomains >= minSuspiciousVariants)
+                    .OrderByDescending(s => s.NumMaliciousDomains)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "ScanStore: failed to retrieve high-risk scans since {Since}.", since);
+                throw new ScanStoreException(
+                    $"Failed to retrieve high-risk scans since {since}.", ex);
+            }
+        }
+
+        public async Task<ScanStats> GetScanStatsAsync(CancellationToken ct = default)
+        {
+            // Each query targets an indexed column — no full table scans.
+            var totalScans = await _dbContext.DomainScans.CountAsync(ct);
+
+            var totalVariants = totalScans > 0
+                ? await _dbContext.DomainScans.SumAsync(s => s.VariantCount, ct)
+                : 0;
+
+            var totalSuspicious = await _dbContext.DomainAnalysisResults
+                .CountAsync(v => v.IsSuspicious, ct);
+
+            var scansWithThreats = await _dbContext.DomainScans
+                .CountAsync(s => s.NumMaliciousDomains > 0, ct);
+
+            var activeScans = await _dbContext.DomainScans
+                .CountAsync(s => s.Status == DomainScanStatus.Pending
+                              || s.Status == DomainScanStatus.InProgress, ct);
+
+            var triggerGroups = await _dbContext.DomainScans
+                .GroupBy(s => s.ScanTrigger)
+                .Select(g => new { Trigger = g.Key, Count = g.Count() })
+                .ToListAsync(ct);
+
+            return new ScanStats
+            {
+                TotalScans = totalScans,
+                TotalVariantsAnalyzed = totalVariants,
+                TotalSuspiciousVariants = totalSuspicious,
+                ScansWithThreats = scansWithThreats,
+                ActiveScans = activeScans,
+                ScansByTrigger = triggerGroups.ToDictionary(
+                    x => x.Trigger.ToString(),
+                    x => x.Count)
             };
         }
 
