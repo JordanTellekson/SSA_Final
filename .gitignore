@@ -368,3 +368,6 @@ FodyWeavers.xsd
 
 # dotnet output
 .dotnet/.dotnet/*
+
+# Runtime application state
+SSA-Final/App_Data/legitimate-domain-batch-state.json

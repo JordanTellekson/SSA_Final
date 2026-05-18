@@ -86,12 +86,14 @@
     </div>
 </div>
 
-@if (Model.LegitimateBatch != null)
+@if (Model.LegitimateBatchProgress != null)
 {
-    var batch = Model.LegitimateBatch;
+    var progress = Model.LegitimateBatchProgress;
+    var batch = progress.NextBatch;
     var batchStart = batch.HasDomains ? batch.StartIndex + 1 : batch.StartIndex;
     var batchEnd = batch.StartIndex + batch.Domains.Count;
     var hasActiveLegitimateBatch = Model.ActiveLegitimateBatchScans > 0;
+    var isBaselineRunBusy = progress.IsRunActive || hasActiveLegitimateBatch;
 
     <div class="card shadow-sm border-0 rounded-4 mb-4">
         <div class="card-body p-4">
@@ -99,7 +101,7 @@
                 <div>
                     <h2 class="fw-bold h5 mb-2">Legitimate domain baseline</h2>
                     <p class="text-muted mb-0">
-                        Queue @batch.BatchSize domains from Legitimate_Domains.txt as direct baseline scans.
+                        Queue Legitimate_Domains.txt in automatic 10-domain sets, stopping after 50 entries.
                     </p>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -107,6 +109,12 @@
                     {
                         <span class="badge text-bg-light border rounded-pill">
                             @batchStart-@batchEnd of @batch.TotalCount
+                        </span>
+                    }
+                    @if (progress.IsRunActive)
+                    {
+                        <span class="badge text-bg-info rounded-pill">
+                            @progress.RunQueuedCount/@progress.RunLimit queued
                         </span>
                     }
                     @if (hasActiveLegitimateBatch)
@@ -120,6 +128,12 @@
 
             @if (batch.HasDomains)
             {
+                @if (progress.IsRunActive)
+                {
+                    <div class="small text-muted mt-3">
+                        Current 50-domain run: @progress.CurrentRunStartDisplay-@progress.CurrentRunEndDisplay of @batch.TotalCount.
+                    </div>
+                }
                 <div class="d-flex flex-wrap gap-2 my-3">
                     @foreach (var domain in batch.Domains)
                     {
@@ -130,21 +144,33 @@
                 @using (Html.BeginForm("QueueLegitimateDomainBatch", "Dashboard", FormMethod.Post))
                 {
                     @Html.AntiForgeryToken()
-                    <input type="hidden" name="startIndex" value="@batch.StartIndex" />
                     <button type="submit"
                             class="btn btn-outline-primary"
-                            disabled="@hasActiveLegitimateBatch">
-                        Queue This Batch
+                            disabled="@isBaselineRunBusy">
+                        Queue Next 50
                     </button>
                 }
             }
-            else if (batch.TotalCount > 0)
+            else if (progress.IsRunActive && progress.RunQueuedCount >= progress.RunLimit)
             {
                 <div class="alert alert-info mt-3 mb-0" role="alert">
-                    All legitimate domains have been queued for this pass.
-                    <a asp-controller="Dashboard" asp-action="Index" asp-route-legitimateBatchStart="0"
-                       class="alert-link">Start over</a>.
+                    The current 50-domain run has queued all 50 entries and will stop when the active scans finish.
                 </div>
+            }
+            else if (batch.TotalCount > 0)
+            {
+                <div class="alert alert-info mt-3" role="alert">
+                    All legitimate domains have been queued for this pass.
+                </div>
+                @using (Html.BeginForm("ResetLegitimateDomainBatchProgress", "Dashboard", FormMethod.Post))
+                {
+                    @Html.AntiForgeryToken()
+                    <button type="submit"
+                            class="btn btn-outline-secondary"
+                            disabled="@isBaselineRunBusy">
+                        Start Over
+                    </button>
+                }
             }
             else
             {

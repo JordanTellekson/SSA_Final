@@ -47,6 +47,7 @@ builder.Services.AddScoped<IDomainRegistrationLookupService, RdapDomainRegistrat
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ILegitimateDomainBatchService, LegitimateDomainBatchService>();
+builder.Services.AddScoped<LegitimateDomainBatchQueueService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
 
 // Scan background job infrastructure: register an unbounded channel and expose both
@@ -59,6 +60,7 @@ var scanChannel = Channel.CreateUnbounded<Guid>(new UnboundedChannelOptions
 builder.Services.AddSingleton(scanChannel.Writer);
 builder.Services.AddSingleton(scanChannel.Reader);
 builder.Services.AddHostedService<ScanBackgroundService>();
+builder.Services.AddHostedService<LegitimateDomainBatchAutomationService>();
 if (builder.Configuration.GetValue("CertStream:Enabled", true))
 {
     builder.Services.AddHostedService<CertStreamIngestionBackgroundService>();
@@ -131,11 +133,13 @@ logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Sco
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
 logger.LogInformation("Registered IReportService -> ReportService (Scoped).");
 logger.LogInformation("Registered ILegitimateDomainBatchService -> LegitimateDomainBatchService (Scoped).");
+logger.LogInformation("Registered LegitimateDomainBatchQueueService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
 logger.LogInformation("Registered IDomainRegistrationLookupService -> RdapDomainRegistrationLookupService (Scoped).");
 logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, DomainAnalyzer.Rdap, Blocklist.OpenPhish, FeedSource.OpenPhish.");
 logger.LogInformation("Registered Channel<Guid> scan queue (ChannelWriter/ChannelReader as Singletons).");
 logger.LogInformation("Registered ScanBackgroundService (IHostedService).");
+logger.LogInformation("Registered LegitimateDomainBatchAutomationService (IHostedService).");
 logger.LogInformation("Registered CertStreamIngestionBackgroundService (IHostedService) when CertStream:Enabled is true.");
 logger.LogInformation("Registered ScheduledScanBackgroundService (IHostedService).");
 logger.LogInformation("Registered IDomainFeedSource -> OpenPhishFeedSource (Singleton).");

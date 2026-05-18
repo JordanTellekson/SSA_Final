@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
 using SSA_Final.Models;
+using SSA_Final.Services;
 using SSA_Final.ViewModels;
 using System.Threading.Channels;
 
@@ -13,29 +14,27 @@ namespace SSA_Final.Controllers
     [Authorize]
     public class DashboardController : Controller
     {
-        private const int LegitimateDomainBatchSize = 10;
-
         private readonly ILogger<DashboardController> _logger;
         private readonly IScanStore _scanStore;
         private readonly ChannelWriter<Guid> _channelWriter;
-        private readonly ILegitimateDomainBatchService _legitimateDomainBatchService;
+        private readonly LegitimateDomainBatchQueueService _legitimateDomainBatchQueueService;
 
         public DashboardController(
             ILogger<DashboardController> logger,
             IScanStore scanStore,
             ChannelWriter<Guid> channelWriter,
-            ILegitimateDomainBatchService legitimateDomainBatchService)
+            LegitimateDomainBatchQueueService legitimateDomainBatchQueueService)
         {
             _logger = logger;
             _scanStore = scanStore;
             _channelWriter = channelWriter;
-            _legitimateDomainBatchService = legitimateDomainBatchService;
+            _legitimateDomainBatchQueueService = legitimateDomainBatchQueueService;
         }
 
         [HttpGet]
-        public async Task<IActionResult> Index([FromQuery] int legitimateBatchStart = 0)
+        public async Task<IActionResult> Index()
         {
-            return View(await BuildDashboardViewModelAsync(legitimateBatchStart));
+            return View(await BuildDashboardViewModelAsync());
         }
 
         [HttpPost]
@@ -74,85 +73,62 @@ namespace SSA_Final.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult QueueLegitimateDomainBatch(int startIndex = 0)
+        public IActionResult QueueLegitimateDomainBatch()
         {
-            var activeBatchScans = GetActiveLegitimateBatchScanCount();
-            if (activeBatchScans > 0)
+            var result = _legitimateDomainBatchQueueService.StartNextRun();
+            switch (result.Status)
             {
-                TempData["ScanError"] =
-                    $"{activeBatchScans} legitimate domain batch scan(s) are still pending or running. Wait for them to finish before moving on.";
-
-                return RedirectToAction(nameof(Index), new { legitimateBatchStart = startIndex });
+                case LegitimateDomainBatchQueueStatus.Queued:
+                    TempData["ScanSuccess"] =
+                        $"Started the next 50-domain baseline run and queued {result.CreatedScans} scan(s), {result.RangeStart}-{result.RangeEnd} of {result.TotalCount}.";
+                    break;
+                case LegitimateDomainBatchQueueStatus.ActiveScansInProgress:
+                    TempData["ScanError"] =
+                        $"{result.ActiveScanCount} legitimate domain batch scan(s) are still pending or running. The next set of 10 will queue automatically when they finish.";
+                    break;
+                case LegitimateDomainBatchQueueStatus.NoDomains:
+                    TempData["ScanError"] = result.TotalCount == 0
+                        ? "No legitimate domains were found to test."
+                        : "All legitimate domains have been queued for this pass.";
+                    break;
+                case LegitimateDomainBatchQueueStatus.RunComplete:
+                    TempData["ScanSuccess"] =
+                        "The current legitimate domain baseline run is complete. You can start the next 50-domain batch.";
+                    break;
+                default:
+                    TempData["ScanError"] = "The legitimate domain baseline run could not be started.";
+                    break;
             }
 
-            var batch = _legitimateDomainBatchService.GetBatch(startIndex, LegitimateDomainBatchSize);
-            if (!batch.HasDomains)
-            {
-                TempData["ScanError"] = batch.TotalCount == 0
-                    ? "No legitimate domains were found to test."
-                    : "All legitimate domains have been queued for this pass.";
-
-                return RedirectToAction(nameof(Index), new { legitimateBatchStart = batch.StartIndex });
-            }
-
-            var queued = 0;
-            foreach (var domain in batch.Domains)
-            {
-                var scan = new DomainScan
-                {
-                    BaseDomain = domain,
-                    CreatedAt = DateTime.UtcNow,
-                    Status = DomainScanStatus.Pending,
-                    ScanTrigger = ScanTrigger.LegitimateBatch,
-                    NumMaliciousDomains = 0
-                };
-
-                _scanStore.Add(scan);
-                if (_channelWriter.TryWrite(scan.Id))
-                {
-                    queued++;
-                }
-                else
-                {
-                    _logger.LogWarning(
-                        "Legitimate domain batch scan {DomainScanId} for '{Domain}' could not be queued.",
-                        scan.Id,
-                        domain);
-                }
-            }
-
-            var rangeStart = batch.StartIndex + 1;
-            var rangeEnd = batch.StartIndex + queued;
-            TempData["ScanSuccess"] =
-                $"Queued {queued} legitimate domain baseline scan(s), {rangeStart}-{rangeEnd} of {batch.TotalCount}.";
-
-            _logger.LogInformation(
-                "Queued {Count} legitimate domain baseline scan(s), {Start}-{End} of {Total}.",
-                queued,
-                rangeStart,
-                rangeEnd,
-                batch.TotalCount);
-
-            return RedirectToAction(nameof(Index), new { legitimateBatchStart = batch.NextStartIndex });
+            return RedirectToAction(nameof(Index));
         }
 
-        private async Task<DomainScanViewModel> BuildDashboardViewModelAsync(int legitimateBatchStart = 0)
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult ResetLegitimateDomainBatchProgress()
+        {
+            var progress = _legitimateDomainBatchQueueService.GetProgress();
+            if (progress.IsRunActive || _legitimateDomainBatchQueueService.GetActiveLegitimateBatchScanCount() > 0)
+            {
+                TempData["ScanError"] =
+                    "Legitimate domain batch scans are still pending or running. Wait for them to finish before resetting progress.";
+
+                return RedirectToAction(nameof(Index));
+            }
+
+            _legitimateDomainBatchQueueService.ResetProgress();
+            TempData["ScanSuccess"] = "Legitimate domain baseline progress was reset to the first domain.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        private async Task<DomainScanViewModel> BuildDashboardViewModelAsync()
         {
             return new DomainScanViewModel
             {
                 Stats = await _scanStore.GetScanStatsAsync(),
-                LegitimateBatch = _legitimateDomainBatchService.GetBatch(
-                    legitimateBatchStart,
-                    LegitimateDomainBatchSize),
-                ActiveLegitimateBatchScans = GetActiveLegitimateBatchScanCount()
+                LegitimateBatchProgress = _legitimateDomainBatchQueueService.GetProgress(),
+                ActiveLegitimateBatchScans = _legitimateDomainBatchQueueService.GetActiveLegitimateBatchScanCount()
             };
-        }
-
-        private int GetActiveLegitimateBatchScanCount()
-        {
-            return _scanStore.GetPendingScans()
-                .Concat(_scanStore.GetInProgressScans())
-                .Count(scan => scan.ScanTrigger == ScanTrigger.LegitimateBatch);
         }
     }
 }

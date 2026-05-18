@@ -21,7 +21,7 @@ namespace SSA_Final.ViewModels
         /// </summary>
         public ScanStats? Stats { get; set; }
 
-        public LegitimateDomainBatch? LegitimateBatch { get; set; }
+        public LegitimateDomainBatchProgress? LegitimateBatchProgress { get; set; }
 
         public int ActiveLegitimateBatchScans { get; set; }
     }

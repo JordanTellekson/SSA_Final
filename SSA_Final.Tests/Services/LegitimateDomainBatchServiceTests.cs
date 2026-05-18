@@ -64,6 +64,53 @@ public class LegitimateDomainBatchServiceTests : IDisposable
         Assert.Equal(0, batch.NextStartIndex);
     }
 
+    [Fact]
+    public void StartRun_ReservesFirstSetAndPersistsNextSet()
+    {
+        WriteDomains(60);
+        var service = CreateService();
+
+        var reservation = service.StartRun(batchSize: 10, runLimit: 50);
+        var progressFromNewInstance = CreateService().GetProgress(batchSize: 10, runLimit: 50);
+
+        Assert.True(reservation.StartedRun);
+        Assert.Equal(10, reservation.Batch.Domains.Count);
+        Assert.Equal("domain-001.test", reservation.Batch.Domains[0]);
+        Assert.Equal(10, reservation.RunQueuedCount);
+
+        Assert.True(progressFromNewInstance.IsRunActive);
+        Assert.Equal(10, progressFromNewInstance.NextStartIndex);
+        Assert.Equal(10, progressFromNewInstance.NextBatch.StartIndex);
+        Assert.Equal("domain-011.test", progressFromNewInstance.NextBatch.Domains[0]);
+        Assert.Equal(10, progressFromNewInstance.NextBatch.Domains.Count);
+    }
+
+    [Fact]
+    public void ReserveNextBatch_StopsAfterFiftyEntriesUntilRunIsCompleted()
+    {
+        WriteDomains(60);
+        var service = CreateService();
+
+        service.StartRun(batchSize: 10, runLimit: 50);
+        service.ReserveNextBatch(batchSize: 10, runLimit: 50);
+        service.ReserveNextBatch(batchSize: 10, runLimit: 50);
+        service.ReserveNextBatch(batchSize: 10, runLimit: 50);
+        service.ReserveNextBatch(batchSize: 10, runLimit: 50);
+
+        var progressAtLimit = service.GetProgress(batchSize: 10, runLimit: 50);
+        var completion = service.ReserveNextBatch(batchSize: 10, runLimit: 50);
+        var progressAfterCompletion = service.GetProgress(batchSize: 10, runLimit: 50);
+
+        Assert.True(progressAtLimit.IsRunActive);
+        Assert.Equal(50, progressAtLimit.RunQueuedCount);
+        Assert.Empty(progressAtLimit.NextBatch.Domains);
+
+        Assert.True(completion.CompletedRun);
+        Assert.False(progressAfterCompletion.IsRunActive);
+        Assert.Equal(50, progressAfterCompletion.NextStartIndex);
+        Assert.Equal("domain-051.test", progressAfterCompletion.NextBatch.Domains[0]);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_contentRoot))
@@ -77,6 +124,13 @@ public class LegitimateDomainBatchServiceTests : IDisposable
         return new LegitimateDomainBatchService(
             new TestWebHostEnvironment { ContentRootPath = _contentRoot },
             NullLogger<LegitimateDomainBatchService>.Instance);
+    }
+
+    private void WriteDomains(int count)
+    {
+        File.WriteAllLines(
+            Path.Combine(_contentRoot, "Legitimate_Domains.txt"),
+            Enumerable.Range(1, count).Select(i => $"domain-{i:000}.test"));
     }
 
     private sealed class TestWebHostEnvironment : IWebHostEnvironment
