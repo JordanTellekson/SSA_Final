@@ -87,6 +87,8 @@ internal sealed class FakeSslCertificateChecker : ISslCertificateChecker
 /// </summary>
 internal sealed class FakeDomainRegistrationLookupService : IDomainRegistrationLookupService
 {
+    public int LookupCount { get; private set; }
+
     private readonly DomainRegistrationMetadata _metadata;
 
     public FakeDomainRegistrationLookupService(DomainRegistrationMetadata metadata)
@@ -96,6 +98,8 @@ internal sealed class FakeDomainRegistrationLookupService : IDomainRegistrationL
         string domain,
         CancellationToken cancellationToken = default)
     {
+        LookupCount++;
+
         return Task.FromResult(new DomainRegistrationMetadata
         {
             Domain = domain,
@@ -106,6 +110,22 @@ internal sealed class FakeDomainRegistrationLookupService : IDomainRegistrationL
             IsLookupSuccessful = _metadata.IsLookupSuccessful,
             FailureReason = _metadata.FailureReason
         });
+    }
+}
+
+internal sealed class FakeDnsResolver : IDnsResolver
+{
+    private readonly bool _hasRecords;
+
+    public FakeDnsResolver(bool hasRecords = true)
+        => _hasRecords = hasRecords;
+
+    public int QueryCount { get; private set; }
+
+    public Task<bool> HasRecordsAsync(string domain)
+    {
+        QueryCount++;
+        return Task.FromResult(_hasRecords);
     }
 }
 
@@ -174,6 +194,7 @@ public class DomainAnalyzerServiceTests
         Func<HttpRequestMessage, HttpResponseMessage>? followResponder = null,
         ISslCertificateChecker? sslChecker = null,
         IDomainRegistrationLookupService? registrationLookup = null,
+        IDnsResolver? dnsResolver = null,
         int timeoutSeconds = 5,
         Dictionary<string, string?>? configOverrides = null)
     {
@@ -192,7 +213,8 @@ public class DomainAnalyzerServiceTests
             NullLogger<DomainAnalyzerService>.Instance,
             null,
             null,
-            registrationLookup);
+            registrationLookup,
+            dnsResolver ?? new FakeDnsResolver());
     }
 
     // ── Null / empty input ────────────────────────────────────────────────────
@@ -689,10 +711,45 @@ public class DomainAnalyzerServiceTests
 
     // ── Error handling ────────────────────────────────────────────────────────
 
-    // "unreachable.com" will not resolve in CI, so IsDomainResolvableAsync returns
-    // false and the noRedirectResponder is never invoked. The test verifies that
-    // an unresolvable domain produces a result without throwing and without a
-    // cross-domain redirect indicator.
+    [Fact]
+    public async Task Analyze_NoDnsRecords_SkipsRiskLookupAndNetworkChecks()
+    {
+        var dnsResolver = new FakeDnsResolver(hasRecords: false);
+        var registrationLookup = new FakeDomainRegistrationLookupService(
+            new DomainRegistrationMetadata
+            {
+                IsLookupSuccessful = true,
+                CreationDateUtc = DateTime.UtcNow.AddDays(-5),
+                ExpirationDateUtc = DateTime.UtcNow.AddDays(365)
+            });
+        var requestCount = 0;
+        var svc = Build(
+            noRedirectResponder: _ =>
+            {
+                requestCount++;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            },
+            followResponder: _ =>
+            {
+                requestCount++;
+                return OkHtml("<html></html>");
+            },
+            registrationLookup: registrationLookup,
+            dnsResolver: dnsResolver);
+
+        var result = await svc.Analyze("secure-login-account-update.invalid");
+
+        Assert.False(result.IsSuspicious);
+        Assert.Empty(result.Indicators);
+        Assert.Equal(0, result.OverallRiskScore);
+        Assert.Contains("No DNS records", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, dnsResolver.QueryCount);
+        Assert.Equal(0, registrationLookup.LookupCount);
+        Assert.Equal(0, requestCount);
+    }
+
+    // The fake DNS resolver defaults to "has records", so this test exercises
+    // network exception handling after the DNS pre-flight succeeds.
     [Fact]
     public async Task Analyze_HttpRequestException_DoesNotThrow_ReturnsResult()
     {

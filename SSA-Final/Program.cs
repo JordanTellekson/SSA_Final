@@ -39,6 +39,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton<ISearchService, SearchService>();
+builder.Services.AddSingleton<IDnsResolver, SystemDnsResolver>();
 builder.Services.AddScoped<IDomainGenerator, DomainGeneratorService>();
 builder.Services.AddScoped<IDomainAnalyzer, DomainAnalyzerService>();
 builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>();
@@ -124,6 +125,7 @@ builder.Services.AddHttpClient("DomainAnalyzer.Rdap", client => {
 });
 
 logger.LogInformation("Registered ISearchService -> SearchService (Singleton).");
+logger.LogInformation("Registered IDnsResolver -> SystemDnsResolver (Singleton).");
 logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Scoped).");
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");

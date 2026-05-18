@@ -4,7 +4,6 @@
 using SSA_Final.Interfaces;
 using SSA_Final.Models;
 using System.Net;
-using System.Net.Sockets;
 using System.Text.RegularExpressions;
 
 namespace SSA_Final.Services
@@ -21,6 +20,7 @@ namespace SSA_Final.Services
         private readonly Lazy<Dictionary<int, List<string>>> _knownLegitimateRootsByLength;
         private readonly IPhishingBlocklistService? _blocklistService;
         private readonly IDomainRegistrationLookupService? _registrationLookupService;
+        private readonly IDnsResolver _dnsResolver;
         private readonly RiskThresholdOptions _riskThresholds;
 
         // ── Structural-risk data ──────────────────────────────────────────────
@@ -46,7 +46,7 @@ namespace SSA_Final.Services
             ISslCertificateChecker sslChecker,
             IConfiguration configuration,
             ILogger<DomainAnalyzerService> logger)
-            : this(httpClientFactory, sslChecker, configuration, logger, null, null, null)
+            : this(httpClientFactory, sslChecker, configuration, logger, null, null, null, null)
         {
         }
 
@@ -57,13 +57,15 @@ namespace SSA_Final.Services
             ILogger<DomainAnalyzerService> logger,
             IWebHostEnvironment? hostEnvironment,
             IPhishingBlocklistService? blocklistService,
-            IDomainRegistrationLookupService? registrationLookupService = null)
+            IDomainRegistrationLookupService? registrationLookupService = null,
+            IDnsResolver? dnsResolver = null)
         {
             _httpClientFactory = httpClientFactory;
             _sslChecker = sslChecker;
             _logger = logger;
             _blocklistService = blocklistService;
             _registrationLookupService = registrationLookupService;
+            _dnsResolver = dnsResolver ?? new SystemDnsResolver();
             _timeoutSeconds = configuration.GetValue<int>("DomainAnalyzer:TimeoutSeconds", 5);
             _riskThresholds = RiskThresholdOptions.FromConfiguration(configuration);
 
@@ -109,10 +111,25 @@ namespace SSA_Final.Services
                     return BuildInvalidInputResult();
                 }
 
+                var normalizedDomain = NormalizeDomain(domain);
+                if (string.IsNullOrWhiteSpace(normalizedDomain))
+                {
+                    return BuildInvalidInputResult();
+                }
+
+                if (!await _dnsResolver.HasRecordsAsync(normalizedDomain))
+                {
+                    _logger.LogInformation(
+                        "[DomainAnalyzerService] Domain {Domain} has no DNS records. Analysis skipped.",
+                        normalizedDomain);
+
+                    return BuildNoDnsRecordsResult(normalizedDomain);
+                }
+
                 var indicators = new List<string>();
 
                 // Pass 0 — Structural risk checks (and blocklist / allow-list checks).
-                var riskResult = await AnalyzeDomainRiskAsync(domain);
+                var riskResult = await AnalyzeDomainRiskAsync(normalizedDomain);
                 if (!riskResult.IsValidDomain)
                 {
                     return riskResult;
@@ -138,22 +155,22 @@ namespace SSA_Final.Services
                     return riskResult;
                 }
 
-                AddRiskIndicators(domain, riskResult, indicators);
+                AddRiskIndicators(normalizedDomain, riskResult, indicators);
                 var structuralIndicatorCount = indicators.Count;
 
                 // Passes 1–3 — Network checks (redirect, SSL, HTML content).
-                await RunNetworkChecksAsync(domain, indicators);
+                await RunNetworkChecksAsync(normalizedDomain, indicators);
 
                 riskResult.Indicators = indicators;
                 var hasNetworkIndicators = indicators.Count > structuralIndicatorCount;
                 riskResult.IsSuspicious = hasNetworkIndicators || IsRiskScoreSuspicious(riskResult.OverallRiskScore);
                 riskResult.Summary = BuildAnalysisSummary(riskResult, indicators);
                 riskResult.AnalysedAt = DateTime.UtcNow;
-                riskResult.DiscoveredDomain = domain;
+                riskResult.DiscoveredDomain = normalizedDomain;
 
                 _logger.LogInformation(
                     "[DomainAnalyzerService] Analyze completed for {Domain}. Suspicious={IsSuspicious}, Indicators={Count}",
-                    domain, riskResult.IsSuspicious, indicators.Count);
+                    normalizedDomain, riskResult.IsSuspicious, indicators.Count);
 
                 return riskResult;
             }
@@ -1198,17 +1215,40 @@ namespace SSA_Final.Services
             };
         }
 
+        private static DomainAnalysisResult BuildNoDnsRecordsResult(string domain)
+        {
+            var noRisk = new DomainRiskSignalScore("N/A", 0, false, "Domain has no DNS records.");
+            return new DomainAnalysisResult
+            {
+                InputDomain = domain,
+                DiscoveredDomain = domain,
+                IsKnownActiveDomain = false,
+                IsValidDomain = true,
+                OverallRiskScore = 0,
+                RiskClassification = DomainAnalysisResult.ClassifyRiskScore(0),
+                TyposquattingEditDistance = noRisk,
+                ExcessiveSubdomains = noRisk,
+                HyphenAbuse = noRisk,
+                ShannonEntropy = noRisk,
+                RepeatedSegment = noRisk,
+                KeywordAbuse = noRisk,
+                DomainRegistrationAge = noRisk,
+                DomainRegistrationLifespan = noRisk,
+                WhoisPrivacyProtection = noRisk,
+                CharacterCompositionAnomaly = noRisk,
+                RegistrationLookupFailureReason = "Skipped because DNS has no records.",
+                IsBlocklistMatch = false,
+                IsSuspicious = false,
+                Summary = "No DNS records found - analysis skipped before risk, registration, SSL, redirect, and HTML checks.",
+                AnalysedAt = DateTime.UtcNow,
+                Indicators = new List<string>()
+            };
+        }
+
         // ── Passes 1–3: Network checks ────────────────────────────────────────
 
         private async Task RunNetworkChecksAsync(string domain, List<string> indicators)
         {
-            // 1. DNS Pre-flight: If the domain doesn't exist, don't bother with HTTP/SSL.
-            if (!await IsDomainResolvableAsync(domain))
-            {
-                _logger.LogInformation("[DomainAnalyzerService] Domain {Domain} has no DNS records. Skipping network checks.", domain);
-                return;
-            }
-
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
 
             try
@@ -1394,17 +1434,5 @@ namespace SSA_Final.Services
             }
         }
 
-        private async Task<bool> IsDomainResolvableAsync(string domain)
-        {
-            try
-            {
-                var addresses = await Dns.GetHostAddressesAsync(domain);
-                return addresses.Length > 0;
-            }
-            catch
-            {
-                return false;
-            }
-        }
     }
 }
