@@ -63,6 +63,10 @@
                 {
                     <div class="alert alert-danger" role="alert">@scanError</div>
                 }
+                @if (TempData["ScanSuccess"] is string scanSuccess)
+                {
+                    <div class="alert alert-success" role="alert">@scanSuccess</div>
+                }
                 @using (Html.BeginForm("Index", "Dashboard", FormMethod.Post))
                 {
                     @Html.AntiForgeryToken()
@@ -81,6 +85,76 @@
         </div>
     </div>
 </div>
+
+@if (Model.LegitimateBatch != null)
+{
+    var batch = Model.LegitimateBatch;
+    var batchStart = batch.HasDomains ? batch.StartIndex + 1 : batch.StartIndex;
+    var batchEnd = batch.StartIndex + batch.Domains.Count;
+    var hasActiveLegitimateBatch = Model.ActiveLegitimateBatchScans > 0;
+
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+                <div>
+                    <h2 class="fw-bold h5 mb-2">Legitimate domain baseline</h2>
+                    <p class="text-muted mb-0">
+                        Queue @batch.BatchSize domains from Legitimate_Domains.txt as direct baseline scans.
+                    </p>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    @if (batch.HasDomains)
+                    {
+                        <span class="badge text-bg-light border rounded-pill">
+                            @batchStart-@batchEnd of @batch.TotalCount
+                        </span>
+                    }
+                    @if (hasActiveLegitimateBatch)
+                    {
+                        <span class="badge text-bg-warning rounded-pill">
+                            @Model.ActiveLegitimateBatchScans active
+                        </span>
+                    }
+                </div>
+            </div>
+
+            @if (batch.HasDomains)
+            {
+                <div class="d-flex flex-wrap gap-2 my-3">
+                    @foreach (var domain in batch.Domains)
+                    {
+                        <span class="badge text-bg-secondary rounded-pill">@domain</span>
+                    }
+                </div>
+
+                @using (Html.BeginForm("QueueLegitimateDomainBatch", "Dashboard", FormMethod.Post))
+                {
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="startIndex" value="@batch.StartIndex" />
+                    <button type="submit"
+                            class="btn btn-outline-primary"
+                            disabled="@hasActiveLegitimateBatch">
+                        Queue This Batch
+                    </button>
+                }
+            }
+            else if (batch.TotalCount > 0)
+            {
+                <div class="alert alert-info mt-3 mb-0" role="alert">
+                    All legitimate domains have been queued for this pass.
+                    <a asp-controller="Dashboard" asp-action="Index" asp-route-legitimateBatchStart="0"
+                       class="alert-link">Start over</a>.
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-warning mt-3 mb-0" role="alert">
+                    No legitimate domains were found.
+                </div>
+            }
+        </div>
+    </div>
+}
 
 @* How it works: three step cards *@
 <p class="text-uppercase text-muted fw-semibold small mb-3" style="letter-spacing: 0.08em;">How it works</p>

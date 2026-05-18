@@ -16,6 +16,9 @@ namespace SSA_Final.Models
         Scheduled = 2,
 
         [Description("CertStream ingestion")]
-        CertStream = 3
+        CertStream = 3,
+
+        [Description("Legitimate domain batch")]
+        LegitimateBatch = 4
     }
 }

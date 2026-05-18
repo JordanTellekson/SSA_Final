@@ -45,6 +45,7 @@ builder.Services.AddScoped<IPhishingBlocklistService, PhishingBlocklistService>(
 builder.Services.AddScoped<IDomainRegistrationLookupService, RdapDomainRegistrationLookupService>();
 builder.Services.AddScoped<IScanStore, SqlScanStoreService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<ILegitimateDomainBatchService, LegitimateDomainBatchService>();
 builder.Services.AddTransient<ISslCertificateChecker, SslCertificateChecker>();
 
 // Scan background job infrastructure: register an unbounded channel and expose both
@@ -127,6 +128,7 @@ logger.LogInformation("Registered IDomainGenerator -> DomainGeneratorService (Sc
 logger.LogInformation("Registered IDomainAnalyzer  -> DomainAnalyzerService (Scoped).");
 logger.LogInformation("Registered IScanStore -> SqlScanStoreService (Scoped).");
 logger.LogInformation("Registered IReportService -> ReportService (Scoped).");
+logger.LogInformation("Registered ILegitimateDomainBatchService -> LegitimateDomainBatchService (Scoped).");
 logger.LogInformation("Registered ISslCertificateChecker -> SslCertificateChecker (Transient).");
 logger.LogInformation("Registered IDomainRegistrationLookupService -> RdapDomainRegistrationLookupService (Scoped).");
 logger.LogInformation("Registered named HttpClients: DomainAnalyzer.NoRedirect, DomainAnalyzer.Follow, DomainAnalyzer.Rdap, Blocklist.OpenPhish, FeedSource.OpenPhish.");

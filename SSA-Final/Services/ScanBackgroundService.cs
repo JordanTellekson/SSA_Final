@@ -233,8 +233,8 @@ namespace SSA_Final.Services
                 }
                 else
                 {
-                    // Feed ingestion domains are already suspected phishing domains sourced
-                    // externally, so skip variant generation and analyse them directly.
+                    // Feed, CertStream, and legitimate-domain batch scans are already
+                    // concrete domains, so skip variant generation and analyse directly.
                     _logger.LogDebug(
                         "Scan {DomainScanId}: trigger is {Trigger} — analysing '{Domain}' directly (no variant generation).",
                         scanId, scan.ScanTrigger, scan.BaseDomain);

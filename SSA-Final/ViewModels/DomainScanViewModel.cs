@@ -20,5 +20,9 @@ namespace SSA_Final.ViewModels
         /// Null-safe — the view renders the stats strip only when this is populated.
         /// </summary>
         public ScanStats? Stats { get; set; }
+
+        public LegitimateDomainBatch? LegitimateBatch { get; set; }
+
+        public int ActiveLegitimateBatchScans { get; set; }
     }
 }

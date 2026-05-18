@@ -25,7 +25,7 @@ namespace SSA_Final.Models
 
         /// <summary>
         /// Scan counts broken down by ScanTrigger label (Manual, Scheduled,
-        /// FeedIngestion, CertStream). Useful for reporting on ingestion source volume.
+        /// FeedIngestion, CertStream, LegitimateBatch). Useful for reporting on ingestion source volume.
         /// </summary>
         public Dictionary<string, int> ScansByTrigger { get; set; } = new();
     }
