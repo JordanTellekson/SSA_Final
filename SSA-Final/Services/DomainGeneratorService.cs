@@ -12,11 +12,32 @@ namespace SSA_Final.Services
         // Subdomain depth cap: real phishing campaigns rarely exceed 2 stacked prefix labels.
         private const int MaxAddedSubdomains = 2;
 
-        // Hyphen insertion cap: more than 3 injected hyphens produces implausible labels.
+        // Extra hyphen insertion cap: more than 3 injected hyphens produces implausible labels.
         private const int MaxAddedHyphens = 3;
 
-        // Per-domain cap on hyphen-insertion variants.
-        private const int MaxHyphenVariantsPerDomain = 100;
+        // Per-label cap on extra-hyphen variants.
+        private const int MaxHyphenVariantsPerLabel = 250;
+
+        // Per-domain cap on combined two-technique typo variants with subdomains and alternate TLDs.
+        private const int MaxCombinedTypoSubdomainTldVariants = 150;
+
+        private enum TypoMutation
+        {
+            Omission,
+            Duplication,
+            AdjacentKey,
+            Transposition,
+            Homoglyph
+        }
+
+        private static readonly TypoMutation[] CombinedTypoMutations =
+        [
+            TypoMutation.Omission,
+            TypoMutation.Duplication,
+            TypoMutation.AdjacentKey,
+            TypoMutation.Transposition,
+            TypoMutation.Homoglyph
+        ];
 
         private static readonly string[] CommonTlds =
         [
@@ -163,8 +184,10 @@ namespace SSA_Final.Services
             var variations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             AddTyposquatting(subdomains, label, tld, variations);
-            AddHyphen(subdomains, label, tld, variations);
             AddSubdomains(subdomains, label, tld, variations);
+            AddHyphenExpansionsFromExistingVariants(variations);
+            AddHyphen(subdomains, label, tld, variations);
+            AddCombinedTypoSubdomainTldVariants(subdomains, label, tld, variations);
 
             // Remove the original input from the output set.
             variations.Remove(normalized);
@@ -183,8 +206,8 @@ namespace SSA_Final.Services
         }
 
         // Adds subdomain- and prefix-based lookalikes such as secure.example.com.
-        // Hyphen-prefix forms (e.g., login-paypal.com) are only emitted for single-prefix (depth=1)
-        // sequences; multi-segment hyphen chains (login-blog-paypal.com) are implausible phishing patterns.
+        // Hyphen-prefix forms cover one- and two-prefix sequences such as login-paypal.com
+        // and login-secure-paypal.com while avoiding deeper implausible chains.
         private static void AddSubdomains(string subdomains, string label, string tld, ISet<string> variations)
         {
             if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(tld))
@@ -226,23 +249,25 @@ namespace SSA_Final.Services
             }
         }
 
-        // Inserts additional hyphens into the label at each character gap.
+        // Inserts additional hyphens only next to hyphens already present in the label.
+        // This keeps clean labels like paypal.com from becoming pay-pal.com while allowing
+        // already-hyphenated variants such as secure-paypal.com -> secure--paypal.com.
         private static void AddHyphen(string subdomains, string label, string tld, ISet<string> variations)
         {
-            if (label.Length < 2)
+            if (label.Length < 2 || !label.Contains('-', StringComparison.Ordinal))
             {
                 return;
             }
 
-            var gaps = label.Length - 1;
+            var hyphenSlots = label.Count(ch => ch == '-');
             var created = 0;
 
             for (var hyphensToInsert = 1; hyphensToInsert <= MaxAddedHyphens; hyphensToInsert++)
             {
-                var distribution = new int[gaps];
+                var distribution = new int[hyphenSlots];
                 AddHyphenPatterns(0, hyphensToInsert, distribution);
 
-                if (created >= MaxHyphenVariantsPerDomain)
+                if (created >= MaxHyphenVariantsPerLabel)
                 {
                     break;
                 }
@@ -250,19 +275,19 @@ namespace SSA_Final.Services
 
             void AddHyphenPatterns(int gapIndex, int remaining, int[] distribution)
             {
-                if (created >= MaxHyphenVariantsPerDomain)
+                if (created >= MaxHyphenVariantsPerLabel)
                 {
                     return;
                 }
 
-                if (gapIndex == gaps)
+                if (gapIndex == hyphenSlots)
                 {
                     if (remaining != 0)
                     {
                         return;
                     }
 
-                    var mutated = BuildHyphenatedLabel(label, distribution);
+                    var mutated = BuildExtraHyphenatedLabel(label, distribution);
                     var domain = BuildDomain(subdomains, mutated, tld);
                     if (!string.IsNullOrWhiteSpace(domain) && variations.Add(domain))
                     {
@@ -277,13 +302,24 @@ namespace SSA_Final.Services
                     distribution[gapIndex] = insertionsAtGap;
                     AddHyphenPatterns(gapIndex + 1, remaining - insertionsAtGap, distribution);
 
-                    if (created >= MaxHyphenVariantsPerDomain)
+                    if (created >= MaxHyphenVariantsPerLabel)
                     {
                         break;
                     }
                 }
 
                 distribution[gapIndex] = 0;
+            }
+        }
+
+        private static void AddHyphenExpansionsFromExistingVariants(ISet<string> variations)
+        {
+            foreach (var domain in variations.ToArray())
+            {
+                if (SplitDomain(domain, out var subdomains, out var label, out var tld))
+                {
+                    AddHyphen(subdomains, label, tld, variations);
+                }
             }
         }
 
@@ -297,74 +333,33 @@ namespace SSA_Final.Services
             }
 
             // Character omission
-            if (label.Length > 1)
+            foreach (var omitted in GenerateTypoLabels(label, TypoMutation.Omission))
             {
-                for (var i = 0; i < label.Length; i++)
-                {
-                    var omitted = label.Remove(i, 1);
-                    if (!string.IsNullOrWhiteSpace(omitted))
-                    {
-                        variations.Add(BuildDomain(subdomains, omitted, tld));
-                    }
-                }
+                variations.Add(BuildDomain(subdomains, omitted, tld));
             }
 
             // Character duplication
-            for (var i = 0; i < label.Length; i++)
+            foreach (var duplicated in GenerateTypoLabels(label, TypoMutation.Duplication))
             {
-                var duplicated = label.Insert(i + 1, label[i].ToString());
                 variations.Add(BuildDomain(subdomains, duplicated, tld));
             }
 
             // Character transposition
-            for (var i = 0; i < label.Length - 1; i++)
+            foreach (var transposed in GenerateTypoLabels(label, TypoMutation.Transposition))
             {
-                if (label[i] == label[i + 1])
-                {
-                    continue;
-                }
-
-                var chars = label.ToCharArray();
-                (chars[i], chars[i + 1]) = (chars[i + 1], chars[i]);
-                variations.Add(BuildDomain(subdomains, new string(chars), tld));
+                variations.Add(BuildDomain(subdomains, transposed, tld));
             }
 
             // Adjacent key substitutions
-            for (var i = 0; i < label.Length; i++)
+            foreach (var adjacentKey in GenerateTypoLabels(label, TypoMutation.AdjacentKey))
             {
-                if (!AdjacentKeys.TryGetValue(label[i], out var adjacent))
-                {
-                    continue;
-                }
-
-                foreach (var replacement in adjacent)
-                {
-                    if (replacement == label[i])
-                    {
-                        continue;
-                    }
-
-                    var chars = label.ToCharArray();
-                    chars[i] = replacement;
-                    variations.Add(BuildDomain(subdomains, new string(chars), tld));
-                }
+                variations.Add(BuildDomain(subdomains, adjacentKey, tld));
             }
 
             // Homoglyph substitutions for both one-char and multi-char keys.
-            foreach (var pair in HomoglyphMap)
+            foreach (var homoglyph in GenerateTypoLabels(label, TypoMutation.Homoglyph))
             {
-                var search = pair.Key;
-                var index = label.IndexOf(search, StringComparison.Ordinal);
-                while (index >= 0)
-                {
-                    foreach (var replacement in pair.Value)
-                    {
-                        var mutated = label[..index] + replacement + label[(index + search.Length)..];
-                        variations.Add(BuildDomain(subdomains, mutated, tld));
-                    }
-
-                    index = label.IndexOf(search, index + 1, StringComparison.Ordinal);
-                }
+                variations.Add(BuildDomain(subdomains, homoglyph, tld));
             }
 
             // TLD swaps
@@ -373,6 +368,88 @@ namespace SSA_Final.Services
                 if (!altTld.Equals(tld, StringComparison.OrdinalIgnoreCase))
                 {
                     variations.Add(BuildDomain(subdomains, label, altTld));
+                }
+            }
+        }
+
+        private static void AddCombinedTypoSubdomainTldVariants(
+            string subdomains,
+            string label,
+            string tld,
+            ISet<string> variations)
+        {
+            if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(tld))
+            {
+                return;
+            }
+
+            var alternateTlds = CommonTlds
+                .Where(altTld => !altTld.Equals(tld, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (alternateTlds.Length == 0)
+            {
+                return;
+            }
+
+            var singleTypoLabels = CombinedTypoMutations
+                .SelectMany(mutation => GenerateTypoLabels(label, mutation))
+                .Where(IsValidLabel)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var combinedLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var firstMutation in CombinedTypoMutations)
+            {
+                foreach (var firstPassLabel in GenerateTypoLabels(label, firstMutation))
+                {
+                    if (!IsValidLabel(firstPassLabel))
+                    {
+                        continue;
+                    }
+
+                    foreach (var secondMutation in CombinedTypoMutations)
+                    {
+                        if (secondMutation == firstMutation)
+                        {
+                            continue;
+                        }
+
+                        foreach (var combinedLabel in GenerateTypoLabels(firstPassLabel, secondMutation))
+                        {
+                            if (!IsValidLabel(combinedLabel) ||
+                                combinedLabel.Equals(label, StringComparison.OrdinalIgnoreCase) ||
+                                singleTypoLabels.Contains(combinedLabel))
+                            {
+                                continue;
+                            }
+
+                            combinedLabels.Add(combinedLabel);
+                        }
+                    }
+                }
+            }
+
+            var rootDomain = BuildDomain(subdomains, label, tld);
+            var created = 0;
+            foreach (var combinedLabel in OrderPseudoRandomly(combinedLabels, rootDomain))
+            {
+                var labelSeed = $"{rootDomain}|{combinedLabel}";
+                foreach (var prefix in OrderPseudoRandomly(SubdomainPrefixes, labelSeed))
+                {
+                    var combinedSubdomains = PrependSubdomain(prefix, subdomains);
+                    foreach (var alternateTld in OrderPseudoRandomly(alternateTlds, $"{labelSeed}|{prefix}"))
+                    {
+                        var domain = BuildDomain(combinedSubdomains, combinedLabel, alternateTld);
+                        if (!string.IsNullOrWhiteSpace(domain) && variations.Add(domain))
+                        {
+                            created++;
+                        }
+
+                        if (created >= MaxCombinedTypoSubdomainTldVariants)
+                        {
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -478,6 +555,13 @@ namespace SSA_Final.Services
                 : $"{subdomains}.{label}.{tld}";
         }
 
+        private static string PrependSubdomain(string prefix, string subdomains)
+        {
+            return string.IsNullOrWhiteSpace(subdomains)
+                ? prefix
+                : $"{prefix}.{subdomains}";
+        }
+
         private static bool IsValidLabel(string label)
         {
             if (string.IsNullOrWhiteSpace(label) || label.Length > 63)
@@ -501,24 +585,144 @@ namespace SSA_Final.Services
             return true;
         }
 
-        private static string BuildHyphenatedLabel(string label, IReadOnlyList<int> distribution)
+        private static IEnumerable<string> GenerateTypoLabels(string label, TypoMutation mutation)
         {
-            if (distribution.Count != label.Length - 1)
+            return mutation switch
+            {
+                TypoMutation.Omission => GenerateOmissionLabels(label),
+                TypoMutation.Duplication => GenerateDuplicationLabels(label),
+                TypoMutation.AdjacentKey => GenerateAdjacentKeyLabels(label),
+                TypoMutation.Transposition => GenerateTranspositionLabels(label),
+                TypoMutation.Homoglyph => GenerateHomoglyphLabels(label),
+                _ => Enumerable.Empty<string>()
+            };
+        }
+
+        private static IEnumerable<string> GenerateOmissionLabels(string label)
+        {
+            if (label.Length <= 1)
+            {
+                yield break;
+            }
+
+            for (var i = 0; i < label.Length; i++)
+            {
+                var omitted = label.Remove(i, 1);
+                if (!string.IsNullOrWhiteSpace(omitted))
+                {
+                    yield return omitted;
+                }
+            }
+        }
+
+        private static IEnumerable<string> GenerateDuplicationLabels(string label)
+        {
+            for (var i = 0; i < label.Length; i++)
+            {
+                yield return label.Insert(i + 1, label[i].ToString());
+            }
+        }
+
+        private static IEnumerable<string> GenerateAdjacentKeyLabels(string label)
+        {
+            for (var i = 0; i < label.Length; i++)
+            {
+                if (!AdjacentKeys.TryGetValue(label[i], out var adjacent))
+                {
+                    continue;
+                }
+
+                foreach (var replacement in adjacent)
+                {
+                    if (replacement == label[i])
+                    {
+                        continue;
+                    }
+
+                    var chars = label.ToCharArray();
+                    chars[i] = replacement;
+                    yield return new string(chars);
+                }
+            }
+        }
+
+        private static IEnumerable<string> GenerateTranspositionLabels(string label)
+        {
+            for (var i = 0; i < label.Length - 1; i++)
+            {
+                if (label[i] == label[i + 1])
+                {
+                    continue;
+                }
+
+                var chars = label.ToCharArray();
+                (chars[i], chars[i + 1]) = (chars[i + 1], chars[i]);
+                yield return new string(chars);
+            }
+        }
+
+        private static IEnumerable<string> GenerateHomoglyphLabels(string label)
+        {
+            foreach (var pair in HomoglyphMap)
+            {
+                var search = pair.Key;
+                var index = label.IndexOf(search, StringComparison.Ordinal);
+                while (index >= 0)
+                {
+                    foreach (var replacement in pair.Value)
+                    {
+                        yield return label[..index] + replacement + label[(index + search.Length)..];
+                    }
+
+                    index = label.IndexOf(search, index + 1, StringComparison.Ordinal);
+                }
+            }
+        }
+
+        private static IEnumerable<string> OrderPseudoRandomly(IEnumerable<string> values, string seed)
+        {
+            var seedHash = ComputeStableHash(seed);
+            return values
+                .OrderBy(value => ComputeStableHash(value) ^ seedHash)
+                .ThenBy(value => value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static uint ComputeStableHash(string value)
+        {
+            const uint offsetBasis = 2166136261;
+            const uint prime = 16777619;
+
+            var hash = offsetBasis;
+            foreach (var ch in value)
+            {
+                hash ^= ch;
+                hash *= prime;
+            }
+
+            return hash;
+        }
+
+        private static string BuildExtraHyphenatedLabel(string label, IReadOnlyList<int> distribution)
+        {
+            if (distribution.Count != label.Count(ch => ch == '-'))
             {
                 return label;
             }
 
             var result = new System.Text.StringBuilder();
+            var hyphenSlot = 0;
             for (var i = 0; i < label.Length; i++)
             {
                 result.Append(label[i]);
-                if (i < label.Length - 1)
+                if (label[i] == '-')
                 {
-                    var hyphenCount = distribution[i];
+                    var hyphenCount = distribution[hyphenSlot];
                     if (hyphenCount > 0)
                     {
                         result.Append('-', hyphenCount);
                     }
+
+                    hyphenSlot++;
                 }
             }
 
