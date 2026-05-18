@@ -14,11 +14,23 @@
             <h1 class="display-5">Scan History</h1>
             <p>A complete archive of all past scans, grouped by date.</p>
         </div>
-        <a href="/api/Reports/download-csv"
-           class="btn btn-outline-light btn-sm flex-shrink-0 mt-1"
-           title="Download scan report as CSV (last 30 days)">
-            ↓ Export Report
-        </a>
+        <div class="d-flex gap-2 flex-wrap justify-content-end">
+            <a href="/api/Reports/domains-csv?lookbackHours=24"
+               class="btn btn-outline-light btn-sm flex-shrink-0 mt-1"
+               title="Download analyzed domains as CSV (last 24 hours)">
+                ↓ Export Domains
+            </a>
+            <a href="/api/Reports/domains-csv?lookbackHours=24&suspiciousOnly=true"
+               class="btn btn-outline-light btn-sm flex-shrink-0 mt-1"
+               title="Download suspicious domains as CSV (last 24 hours)">
+                ↓ Suspicious Only
+            </a>
+            <a href="/api/Reports/download-csv"
+               class="btn btn-outline-light btn-sm flex-shrink-0 mt-1"
+               title="Download scan summary as CSV (last 24 hours)">
+                ↓ Scan Summary
+            </a>
+        </div>
     </div>
 </div>
 

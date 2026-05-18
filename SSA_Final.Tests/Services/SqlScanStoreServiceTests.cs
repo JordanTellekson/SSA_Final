@@ -202,4 +202,100 @@ public class SqlScanStoreServiceTests
         var scan = Assert.Single(result);
         Assert.Equal(highRisk.Id, scan.Id);
     }
+
+    [Fact]
+    public async Task GetAnalyzedDomainReportItemsAsync_ReturnsRowsInWindow()
+    {
+        await using var ctx = BuildContext();
+        var now = DateTime.UtcNow;
+        var scan = MakeScan("example.com", now.AddHours(-2));
+        scan.TimeFinished = now.AddHours(-1);
+        scan.ScanTrigger = ScanTrigger.Scheduled;
+        scan.Variants.Add(new DomainAnalysisResult
+        {
+            DomainScanId = scan.Id,
+            DiscoveredDomain = "example.com",
+            IsSuspicious = false,
+            RiskClassification = "Low",
+            OverallRiskScore = 0,
+            Summary = "No issues detected.",
+            Indicators = new List<string>(),
+            AnalysedAt = now.AddHours(-1)
+        });
+        scan.Variants.Add(new DomainAnalysisResult
+        {
+            DomainScanId = scan.Id,
+            DiscoveredDomain = "example-login.com",
+            IsSuspicious = true,
+            RiskClassification = "High",
+            OverallRiskScore = 65,
+            Summary = "Domain flagged with indicators.",
+            Indicators = new List<string> { "Keyword Abuse: login" },
+            AnalysedAt = now.AddMinutes(-30)
+        });
+        scan.Variants.Add(new DomainAnalysisResult
+        {
+            DomainScanId = scan.Id,
+            DiscoveredDomain = "old.example.com",
+            IsSuspicious = true,
+            RiskClassification = "Critical",
+            OverallRiskScore = 100,
+            Summary = "Outside the window.",
+            Indicators = new List<string> { "Blocklist Match" },
+            AnalysedAt = now.AddHours(-30)
+        });
+
+        ctx.DomainScans.Add(scan);
+        await ctx.SaveChangesAsync();
+
+        var svc = BuildService(ctx);
+        var result = await svc.GetAnalyzedDomainReportItemsAsync(
+            now.AddHours(-24),
+            now);
+
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, item => item.DiscoveredDomain == "example.com");
+        Assert.Contains(result, item => item.DiscoveredDomain == "example-login.com");
+        Assert.DoesNotContain(result, item => item.DiscoveredDomain == "old.example.com");
+        Assert.All(result, item => Assert.Equal(ScanTrigger.Scheduled, item.ScanTrigger));
+    }
+
+    [Fact]
+    public async Task GetAnalyzedDomainReportItemsAsync_WithSuspiciousOnly_FiltersCleanRows()
+    {
+        await using var ctx = BuildContext();
+        var now = DateTime.UtcNow;
+        var scan = MakeScan("example.com", now.AddHours(-2));
+        scan.Variants.Add(new DomainAnalysisResult
+        {
+            DomainScanId = scan.Id,
+            DiscoveredDomain = "example.com",
+            IsSuspicious = false,
+            RiskClassification = "Low",
+            Summary = "No issues detected.",
+            AnalysedAt = now.AddMinutes(-20)
+        });
+        scan.Variants.Add(new DomainAnalysisResult
+        {
+            DomainScanId = scan.Id,
+            DiscoveredDomain = "example-login.com",
+            IsSuspicious = true,
+            RiskClassification = "High",
+            Summary = "Domain flagged with indicators.",
+            AnalysedAt = now.AddMinutes(-10)
+        });
+
+        ctx.DomainScans.Add(scan);
+        await ctx.SaveChangesAsync();
+
+        var svc = BuildService(ctx);
+        var result = await svc.GetAnalyzedDomainReportItemsAsync(
+            now.AddHours(-24),
+            now,
+            suspiciousOnly: true);
+
+        var item = Assert.Single(result);
+        Assert.Equal("example-login.com", item.DiscoveredDomain);
+        Assert.True(item.IsSuspicious);
+    }
 }

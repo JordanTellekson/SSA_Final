@@ -311,6 +311,49 @@ namespace SSA_Final.Services
 
             return await variantsQuery.ToListAsync();
         }
+
+        public async Task<IReadOnlyList<DomainAnalysisReportItem>> GetAnalyzedDomainReportItemsAsync(
+            DateTime startUtc,
+            DateTime endUtc,
+            bool suspiciousOnly = false)
+        {
+            var variantsQuery = _dbContext.DomainAnalysisResults
+                .Where(variant =>
+                    variant.AnalysedAt >= startUtc &&
+                    variant.AnalysedAt <= endUtc);
+
+            if (suspiciousOnly)
+            {
+                variantsQuery = variantsQuery.Where(variant => variant.IsSuspicious);
+            }
+
+            var rows = await variantsQuery
+                .Join(
+                    _dbContext.DomainScans,
+                    variant => variant.DomainScanId,
+                    scan => scan.Id,
+                    (variant, scan) => new { variant, scan })
+                .OrderByDescending(row => row.variant.AnalysedAt)
+                .ThenBy(row => row.variant.DiscoveredDomain)
+                .ToListAsync();
+
+            return rows
+                .Select(row => new DomainAnalysisReportItem
+                {
+                    ScanId = row.scan.Id,
+                    BaseDomain = row.scan.BaseDomain,
+                    ScanStatus = row.scan.Status,
+                    ScanTrigger = row.scan.ScanTrigger,
+                    DiscoveredDomain = row.variant.DiscoveredDomain,
+                    IsSuspicious = row.variant.IsSuspicious,
+                    RiskClassification = row.variant.RiskClassification,
+                    OverallRiskScore = row.variant.OverallRiskScore,
+                    Summary = row.variant.Summary,
+                    Indicators = row.variant.Indicators.ToList(),
+                    AnalysedAtUtc = row.variant.AnalysedAt
+                })
+                .ToList();
+        }
     }
 }
 

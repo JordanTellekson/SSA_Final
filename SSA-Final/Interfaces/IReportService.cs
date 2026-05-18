@@ -8,6 +8,15 @@ namespace SSA_Final.Interfaces
             TimeSpan? lookbackWindow = null,
             CancellationToken cancellationToken = default);
 
+        Task<DomainAnalysisReport> GenerateDomainAnalysisReportAsync(
+            TimeSpan? lookbackWindow = null,
+            bool suspiciousOnly = false,
+            DateTime? startUtc = null,
+            DateTime? endUtc = null,
+            CancellationToken cancellationToken = default);
+
         string ToCsv(HighRiskAlertReport report);
+
+        string ToCsv(DomainAnalysisReport report);
     }
 }

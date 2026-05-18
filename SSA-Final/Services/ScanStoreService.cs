@@ -222,6 +222,41 @@ namespace SSA_Final.Services
                     variants.ToList());
             }
         }
+
+        public Task<IReadOnlyList<DomainAnalysisReportItem>> GetAnalyzedDomainReportItemsAsync(
+            DateTime startUtc,
+            DateTime endUtc,
+            bool suspiciousOnly = false)
+        {
+            lock (_lock)
+            {
+                var items = _scans
+                    .SelectMany(scan => scan.Variants.Select(variant => new { scan, variant }))
+                    .Where(row =>
+                        row.variant.AnalysedAt >= startUtc &&
+                        row.variant.AnalysedAt <= endUtc &&
+                        (!suspiciousOnly || row.variant.IsSuspicious))
+                    .OrderByDescending(row => row.variant.AnalysedAt)
+                    .ThenBy(row => row.variant.DiscoveredDomain, StringComparer.OrdinalIgnoreCase)
+                    .Select(row => new DomainAnalysisReportItem
+                    {
+                        ScanId = row.scan.Id,
+                        BaseDomain = row.scan.BaseDomain,
+                        ScanStatus = row.scan.Status,
+                        ScanTrigger = row.scan.ScanTrigger,
+                        DiscoveredDomain = row.variant.DiscoveredDomain,
+                        IsSuspicious = row.variant.IsSuspicious,
+                        RiskClassification = row.variant.RiskClassification,
+                        OverallRiskScore = row.variant.OverallRiskScore,
+                        Summary = row.variant.Summary,
+                        Indicators = row.variant.Indicators.ToList(),
+                        AnalysedAtUtc = row.variant.AnalysedAt
+                    })
+                    .ToList();
+
+                return Task.FromResult<IReadOnlyList<DomainAnalysisReportItem>>(items);
+            }
+        }
     }
 }
 

@@ -45,6 +45,40 @@ namespace SSA_Final.Services
             };
         }
 
+        public async Task<DomainAnalysisReport> GenerateDomainAnalysisReportAsync(
+            TimeSpan? lookbackWindow = null,
+            bool suspiciousOnly = false,
+            DateTime? startUtc = null,
+            DateTime? endUtc = null,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var effectiveEnd = NormalizeUtc(endUtc) ?? DateTime.UtcNow;
+            var window = lookbackWindow ?? _options.GetLookbackWindow();
+            var effectiveStart = NormalizeUtc(startUtc) ?? effectiveEnd - window;
+
+            if (effectiveStart > effectiveEnd)
+            {
+                throw new ArgumentException("Report start time must be on or before the end time.");
+            }
+
+            var items = await _scanStore.GetAnalyzedDomainReportItemsAsync(
+                effectiveStart,
+                effectiveEnd,
+                suspiciousOnly);
+
+            return new DomainAnalysisReport
+            {
+                GeneratedAtUtc = DateTime.UtcNow,
+                LookbackStartUtc = effectiveStart,
+                LookbackEndUtc = effectiveEnd,
+                LookbackHours = (effectiveEnd - effectiveStart).TotalHours,
+                SuspiciousOnly = suspiciousOnly,
+                Items = items
+            };
+        }
+
         public string ToCsv(HighRiskAlertReport report)
         {
             var csv = new StringBuilder();
@@ -69,6 +103,39 @@ namespace SSA_Final.Services
                 csv.Append(item.HasBlocklistMatch ? "true" : "false");
                 csv.Append(',');
                 csv.AppendLine(Csv(item.BlocklistSource));
+            }
+
+            return csv.ToString();
+        }
+
+        public string ToCsv(DomainAnalysisReport report)
+        {
+            var csv = new StringBuilder();
+            csv.AppendLine("ScanId,BaseDomain,DiscoveredDomain,Status,Classification,OverallRiskScore,Summary,Indicators,AnalysedAtUtc,ScanStatus,ScanTrigger");
+
+            foreach (var item in report.Items)
+            {
+                csv.Append(Csv(item.ScanId.ToString()));
+                csv.Append(',');
+                csv.Append(Csv(item.BaseDomain));
+                csv.Append(',');
+                csv.Append(Csv(item.DiscoveredDomain));
+                csv.Append(',');
+                csv.Append(Csv(item.IsSuspicious ? "Suspicious" : "Clean"));
+                csv.Append(',');
+                csv.Append(Csv(item.RiskClassification));
+                csv.Append(',');
+                csv.Append(item.OverallRiskScore.ToString(CultureInfo.InvariantCulture));
+                csv.Append(',');
+                csv.Append(Csv(item.Summary));
+                csv.Append(',');
+                csv.Append(Csv(string.Join("; ", item.Indicators)));
+                csv.Append(',');
+                csv.Append(Csv(item.AnalysedAtUtc.ToString("O", CultureInfo.InvariantCulture)));
+                csv.Append(',');
+                csv.Append(Csv(item.ScanStatus.ToString()));
+                csv.Append(',');
+                csv.AppendLine(Csv(item.ScanTrigger.ToString()));
             }
 
             return csv.ToString();
@@ -115,6 +182,21 @@ namespace SSA_Final.Services
             }
 
             return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+
+        private static DateTime? NormalizeUtc(DateTime? value)
+        {
+            if (!value.HasValue)
+            {
+                return null;
+            }
+
+            return value.Value.Kind switch
+            {
+                DateTimeKind.Utc => value.Value,
+                DateTimeKind.Local => value.Value.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+            };
         }
     }
 }

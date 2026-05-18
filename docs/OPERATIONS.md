@@ -97,11 +97,16 @@ Variant result fields:
 
 High-risk reports:
 
-- JSON: `GET /Reports/Generate`
-- CSV: `GET /Reports/Generate?format=csv`
-- Custom lookback: `GET /Reports/Generate?lookbackHours=48`
+- Scan summary CSV: `GET /api/Reports/download-csv`
+- Domain-level CSV: `GET /api/Reports/domains-csv`
+- Suspicious domains only: `GET /api/Reports/domains-csv?suspiciousOnly=true`
+- Custom lookback: `GET /api/Reports/domains-csv?lookbackHours=48`
+- Exact time window: `GET /api/Reports/domains-csv?startUtc=2026-05-17T00:00:00Z&endUtc=2026-05-18T00:00:00Z`
 
-Reports include completed scans in the lookback window where `NumMaliciousDomains > 0`.
+The scan summary report includes completed scans in the lookback window. The
+domain-level report includes one row per analyzed domain using already persisted
+result data: status, classification, score, summary, indicators, and analysis
+timestamp.
 
 Scheduled monitoring:
 

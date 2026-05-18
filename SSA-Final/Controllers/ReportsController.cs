@@ -82,6 +82,60 @@ namespace SSA_Final.Controllers
         }
 
         /// <summary>
+        /// Streams a CSV export with one row per analyzed domain in the selected time window.
+        /// Use suspiciousOnly=true to include only domains flagged as suspicious.
+        /// </summary>
+        [HttpGet("domains-csv")]
+        public async Task<IActionResult> DownloadDomainsCsv(
+            [FromQuery] double? lookbackHours,
+            [FromQuery] DateTime? startUtc,
+            [FromQuery] DateTime? endUtc,
+            [FromQuery] bool suspiciousOnly = false)
+        {
+            if (lookbackHours.HasValue && lookbackHours.Value <= 0)
+            {
+                return BadRequest("lookbackHours must be greater than zero.");
+            }
+
+            var normalizedStart = NormalizeUtc(startUtc);
+            var normalizedEnd = NormalizeUtc(endUtc);
+            if (normalizedStart.HasValue &&
+                normalizedEnd.HasValue &&
+                normalizedStart.Value > normalizedEnd.Value)
+            {
+                return BadRequest("startUtc must be on or before endUtc.");
+            }
+
+            var window = lookbackHours.HasValue
+                ? TimeSpan.FromHours(lookbackHours.Value)
+                : (TimeSpan?)null;
+
+            _logger.LogInformation(
+                "Generating domain CSV report. LookbackHours={Hours}, StartUtc={StartUtc}, EndUtc={EndUtc}, SuspiciousOnly={SuspiciousOnly}",
+                lookbackHours?.ToString() ?? "default",
+                normalizedStart?.ToString("O") ?? "default",
+                normalizedEnd?.ToString("O") ?? "default",
+                suspiciousOnly);
+
+            var report = await _reportService.GenerateDomainAnalysisReportAsync(
+                window,
+                suspiciousOnly,
+                normalizedStart,
+                normalizedEnd);
+            var csv = _reportService.ToCsv(report);
+            var bytes = Encoding.UTF8.GetBytes(csv);
+            var scope = suspiciousOnly ? "suspicious-domains" : "domains";
+            var filename = $"{scope}-report-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv";
+
+            _logger.LogInformation(
+                "Domain CSV report generated. Rows={Rows}, Filename={Filename}",
+                report.Items.Count,
+                filename);
+
+            return File(bytes, "text/csv", filename);
+        }
+
+        /// <summary>
         /// Streams a CSV export of all variant analysis results for a single scan.
         /// </summary>
         /// <param name="id">The scan ID to export.</param>
@@ -140,6 +194,21 @@ namespace SSA_Final.Controllers
                 !value.Contains('\r') && !value.Contains('\n'))
                 return value;
             return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+
+        private static DateTime? NormalizeUtc(DateTime? value)
+        {
+            if (!value.HasValue)
+            {
+                return null;
+            }
+
+            return value.Value.Kind switch
+            {
+                DateTimeKind.Utc => value.Value,
+                DateTimeKind.Local => value.Value.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+            };
         }
     }
 }

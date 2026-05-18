@@ -78,6 +78,38 @@ internal sealed class FakeReportScanStore : IScanStore
             GetById(scanId)?.Variants ?? new List<DomainAnalysisResult>());
     }
 
+    public Task<IReadOnlyList<DomainAnalysisReportItem>> GetAnalyzedDomainReportItemsAsync(
+        DateTime startUtc,
+        DateTime endUtc,
+        bool suspiciousOnly = false)
+    {
+        var items = _scans
+            .SelectMany(scan => scan.Variants.Select(variant => new { scan, variant }))
+            .Where(row =>
+                row.variant.AnalysedAt >= startUtc &&
+                row.variant.AnalysedAt <= endUtc &&
+                (!suspiciousOnly || row.variant.IsSuspicious))
+            .OrderByDescending(row => row.variant.AnalysedAt)
+            .ThenBy(row => row.variant.DiscoveredDomain, StringComparer.OrdinalIgnoreCase)
+            .Select(row => new DomainAnalysisReportItem
+            {
+                ScanId = row.scan.Id,
+                BaseDomain = row.scan.BaseDomain,
+                ScanStatus = row.scan.Status,
+                ScanTrigger = row.scan.ScanTrigger,
+                DiscoveredDomain = row.variant.DiscoveredDomain,
+                IsSuspicious = row.variant.IsSuspicious,
+                RiskClassification = row.variant.RiskClassification,
+                OverallRiskScore = row.variant.OverallRiskScore,
+                Summary = row.variant.Summary,
+                Indicators = row.variant.Indicators.ToList(),
+                AnalysedAtUtc = row.variant.AnalysedAt
+            })
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<DomainAnalysisReportItem>>(items);
+    }
+
     public Task<bool> WasRecentlyScannedAsync(string domain, TimeSpan window)
     {
         throw new NotSupportedException();
@@ -227,5 +259,129 @@ public class ReportServiceTests
 
         Assert.Contains("ScanId,ScanTimestampUtc,BaseDomain", csv);
         Assert.Contains("\"Detected login, secure\"", csv);
+    }
+
+    [Fact]
+    public async Task GenerateDomainAnalysisReport_ReturnsAnalyzedDomainsInWindow()
+    {
+        var now = DateTime.UtcNow;
+        var scan = MakeScan(
+            "example.com",
+            now.AddMinutes(-10),
+            1,
+            new DomainAnalysisResult
+            {
+                DiscoveredDomain = "example.com",
+                IsSuspicious = false,
+                RiskClassification = "Low",
+                OverallRiskScore = 0,
+                Summary = "No issues detected.",
+                AnalysedAt = now.AddHours(-1),
+                Indicators = new List<string>()
+            },
+            new DomainAnalysisResult
+            {
+                DiscoveredDomain = "example-login.com",
+                IsSuspicious = true,
+                RiskClassification = "High",
+                OverallRiskScore = 65,
+                Summary = "Domain flagged with indicators.",
+                AnalysedAt = now.AddMinutes(-30),
+                Indicators = new List<string> { "Keyword Abuse: login" }
+            },
+            new DomainAnalysisResult
+            {
+                DiscoveredDomain = "old.example.com",
+                IsSuspicious = true,
+                RiskClassification = "Critical",
+                OverallRiskScore = 100,
+                Summary = "Too old for the requested window.",
+                AnalysedAt = now.AddHours(-30),
+                Indicators = new List<string> { "Blocklist Match" }
+            });
+
+        var service = new ReportService(new FakeReportScanStore([scan]), BuildConfig());
+
+        var report = await service.GenerateDomainAnalysisReportAsync(
+            lookbackWindow: TimeSpan.FromHours(24),
+            endUtc: now);
+
+        Assert.False(report.SuspiciousOnly);
+        Assert.Equal(2, report.Items.Count);
+        Assert.Contains(report.Items, item => item.DiscoveredDomain == "example.com");
+        Assert.Contains(report.Items, item => item.DiscoveredDomain == "example-login.com");
+        Assert.DoesNotContain(report.Items, item => item.DiscoveredDomain == "old.example.com");
+    }
+
+    [Fact]
+    public async Task GenerateDomainAnalysisReport_WithSuspiciousOnly_ReturnsOnlySuspiciousDomains()
+    {
+        var now = DateTime.UtcNow;
+        var scan = MakeScan(
+            "example.com",
+            now.AddMinutes(-10),
+            1,
+            new DomainAnalysisResult
+            {
+                DiscoveredDomain = "example.com",
+                IsSuspicious = false,
+                RiskClassification = "Low",
+                Summary = "No issues detected.",
+                AnalysedAt = now.AddMinutes(-20)
+            },
+            new DomainAnalysisResult
+            {
+                DiscoveredDomain = "example-login.com",
+                IsSuspicious = true,
+                RiskClassification = "High",
+                Summary = "Domain flagged with indicators.",
+                AnalysedAt = now.AddMinutes(-10)
+            });
+
+        var service = new ReportService(new FakeReportScanStore([scan]), BuildConfig());
+
+        var report = await service.GenerateDomainAnalysisReportAsync(
+            lookbackWindow: TimeSpan.FromHours(24),
+            suspiciousOnly: true,
+            endUtc: now);
+
+        var item = Assert.Single(report.Items);
+        Assert.True(report.SuspiciousOnly);
+        Assert.Equal("example-login.com", item.DiscoveredDomain);
+    }
+
+    [Fact]
+    public void ToCsv_DomainAnalysisReport_IncludesRequestedColumnsAndEscapesIndicators()
+    {
+        var service = new ReportService(
+            new FakeReportScanStore(Array.Empty<DomainScan>()),
+            BuildConfig());
+        var report = new DomainAnalysisReport
+        {
+            Items = new[]
+            {
+                new DomainAnalysisReportItem
+                {
+                    ScanId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                    BaseDomain = "example.com",
+                    DiscoveredDomain = "example-login.com",
+                    IsSuspicious = true,
+                    RiskClassification = "High",
+                    OverallRiskScore = 65,
+                    Summary = "Domain flagged, check details.",
+                    Indicators = new[] { "Keyword Abuse: login", "No DNS records found, skipped network checks" },
+                    AnalysedAtUtc = new DateTime(2026, 5, 18, 12, 0, 0, DateTimeKind.Utc),
+                    ScanStatus = DomainScanStatus.Completed,
+                    ScanTrigger = ScanTrigger.Manual
+                }
+            }
+        };
+
+        var csv = service.ToCsv(report);
+
+        Assert.Contains("ScanId,BaseDomain,DiscoveredDomain,Status,Classification,OverallRiskScore,Summary,Indicators,AnalysedAtUtc,ScanStatus,ScanTrigger", csv);
+        Assert.Contains("Suspicious,High,65", csv);
+        Assert.Contains("\"Domain flagged, check details.\"", csv);
+        Assert.Contains("\"Keyword Abuse: login; No DNS records found, skipped network checks\"", csv);
     }
 }
