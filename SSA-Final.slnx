@@ -1,3 +1,6 @@
 <Solution>
   <Project Path="SSA-Final/SSA-Final.csproj" />
+  <Project Path="SSA_Final.Tests/SSA_Final.Tests.csproj" Id="6de4e111-a392-46ea-9419-be94175bdeba">
+    <Build Solution="Debug|*" Project="false" />
+  </Project>
 </Solution>

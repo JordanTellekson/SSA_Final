@@ -17,7 +17,7 @@ namespace SSA_Final.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.2")
+                .HasAnnotation("ProductVersion", "10.0.6")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -224,6 +224,95 @@ namespace SSA_Final.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("SSA_Final.Models.DomainAnalysisResult", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("AnalysedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("BlocklistSource")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DiscoveredDomain")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("DomainScanId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.PrimitiveCollection<string>("Indicators")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsBlocklistMatch")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSuspicious")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("OverallRiskScore")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RiskClassification")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TopRiskSignal")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TopRiskSignalDetail")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("TopRiskSignalScore")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DomainScanId");
+
+                    b.ToTable("DomainAnalysisResults");
+                });
+
+            modelBuilder.Entity("SSA_Final.Models.DomainScan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("BaseDomain")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("NumMaliciousDomains")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ScanTrigger")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("TimeFinished")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("VariantCount")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DomainScans");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -273,6 +362,20 @@ namespace SSA_Final.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("SSA_Final.Models.DomainAnalysisResult", b =>
+                {
+                    b.HasOne("SSA_Final.Models.DomainScan", null)
+                        .WithMany("Variants")
+                        .HasForeignKey("DomainScanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SSA_Final.Models.DomainScan", b =>
+                {
+                    b.Navigation("Variants");
                 });
 #pragma warning restore 612, 618
         }

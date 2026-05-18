@@ -1,4 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+// File: DomainScanViewModel.cs
+// Purpose: Defines project behavior and data flow for phishing-domain analysis and reporting.
+
+using System.ComponentModel.DataAnnotations;
 
 namespace SSA_Final.ViewModels
 {
@@ -9,6 +12,6 @@ namespace SSA_Final.ViewModels
             @"^(?!:\/\/)([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$",
             ErrorMessage = "Enter a valid domain (e.g. example.com)"
         )]
-        public string Domain { get; set; }
+        public string Domain { get; set; } = string.Empty;
     }
 }

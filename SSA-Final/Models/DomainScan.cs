@@ -1,12 +1,17 @@
-﻿namespace SSA_Final.Models
+// Aggregate model representing one scan run and all generated variant results.
+
+namespace SSA_Final.Models
 {
     public class DomainScan
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string BaseDomain { get; set; } = string.Empty;
-        public DateTime ScannedAt { get; set; } = DateTime.UtcNow;
-        public DomainScanStatus Status { get; set; } = DomainScanStatus.Complete;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? TimeFinished { get; set; }
+        public DomainScanStatus Status { get; set; } = DomainScanStatus.Pending;
+        public ScanTrigger ScanTrigger { get; set; } = ScanTrigger.Manual;
+        public int NumMaliciousDomains { get; set; }
+        public int VariantCount { get; set; }
         public List<DomainAnalysisResult> Variants { get; set; } = new();
-        public int MaliciousCount => Variants.Count(v => v.IsSuspicious);
     }
 }

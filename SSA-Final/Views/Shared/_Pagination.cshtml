@@ -1,0 +1,39 @@
+﻿@using SSA_Final.Models
+@using SSA_Final.Interfaces
+@model IPagedResult<DomainScan>
+
+@if (Model.TotalPages > 1)
+{
+    <nav>
+        <ul class="pagination">
+
+            <li class="page-item @(Model.Page == 1 ? "disabled" : "")">
+                <a class="page-link"
+                       href="#"
+                       data-page="@(Model.Page - 1)">
+                    Previous
+                </a>
+            </li>
+
+            @for (int i = 1; i <= Model.TotalPages; i++)
+            {
+                <li class="page-item @(i == Model.Page ? "active" : "")">
+                    <a class="page-link"
+                           href="#"
+                           data-page="@i">
+                        @i
+                    </a>
+                </li>
+            }
+
+            <li class="page-item @(Model.Page == Model.TotalPages ? "disabled" : "")">
+                <a class="page-link"
+                       href="#"
+                       data-page="@(Model.Page + 1)">
+                    Next
+                </a>
+            </li>
+
+        </ul>
+    </nav>
+}

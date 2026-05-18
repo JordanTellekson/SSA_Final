@@ -1,6 +1,11 @@
-﻿using Microsoft.AspNetCore.Authorization;
+// MVC controller for authenticated scan result listings and details.
+// Provides summary and per-scan drill-down views over persisted scan data.
+
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SSA_Final.Interfaces;
+using SSA_Final.Models;
+using SSA_Final.ViewModels;
 
 namespace SSA_Final.Controllers
 {
@@ -16,13 +21,36 @@ namespace SSA_Final.Controllers
             _scanStore = scanStore;
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index([FromQuery] ScanQuery scanQuery)
         {
-            var scans = _scanStore.GetAll();
-            return View(scans);
+            _logger.LogInformation("Scan results index view loaded at {Time}", DateTime.UtcNow);
+
+            if (!string.IsNullOrWhiteSpace(scanQuery.Query))
+            {
+                scanQuery.Page = 1;
+            }
+
+            var result = await _scanStore.GetPagedAsync(scanQuery);
+            var hasAnyScans = await _scanStore.GetAnyAsync();
+
+            var vm = new PagedResultViewModel<DomainScan>
+            {
+                Result = result,
+                Query = scanQuery.Query,
+                Filters = scanQuery,
+                ViewType = "table",
+                HasAnyScans = hasAnyScans
+            };
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return PartialView("_ScanList", vm);
+            }
+
+            return View(vm);
         }
 
-        public IActionResult Details(Guid id)
+        public async Task<IActionResult> Details(Guid id)
         {
             var scan = _scanStore.GetById(id);
             if (scan is null)
@@ -31,7 +59,32 @@ namespace SSA_Final.Controllers
                 return NotFound();
             }
 
+            foreach (var variant in scan.Variants)
+            {
+                variant.DiscoveredDomain ??= string.Empty;
+                variant.Summary ??= string.Empty;
+                variant.Indicators ??= new List<string>();
+                variant.RiskClassification = DomainAnalysisResult.NormalizeRiskClassification(variant.RiskClassification);
+            }
+
             return View(scan);
+        }
+
+        /// <summary>
+        /// Lightweight JSON endpoint polled by the Details page while a scan is in progress.
+        /// Returns only the current status so the view can decide when to reload.
+        /// </summary>
+        [HttpGet]
+        public IActionResult GetScanStatus(Guid id)
+        {
+            var scan = _scanStore.GetById(id);
+            if (scan is null)
+            {
+                return NotFound();
+            }
+
+            return Json(new { status = scan.Status.ToString() });
         }
     }
 }
+
